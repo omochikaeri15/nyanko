@@ -12,7 +12,7 @@ Designed as a standalone API, `nyanko` abstracts away the underlying engine comp
 - **Pack Cryptology:** Hands back unencrypted pack bytes when encrypted pack bytes and keys are provided.
 
 ## Installation
-Type the following command in your terminal next to your Cargo.toml:
+Type the following command in your terminal next to your `Cargo.toml`:
 
 ```bash
 cargo add nyanko
