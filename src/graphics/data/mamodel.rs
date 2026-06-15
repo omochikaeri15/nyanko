@@ -31,13 +31,13 @@ pub struct ModelPart {
     /// The baseline alpha transparency value.
     pub alpha: f32,
     /// An integer flag indicating if additive blending (glow) is enabled.
-    pub glow_mode: i32,
+    pub glow_mode: u8,
     /// Indicates if the sprite geometry is horizontally inverted.
     pub flip_x: bool,
     /// Indicates if the sprite geometry is vertically inverted.
     pub flip_y: bool,
     /// The internal logical name of the part.
-    #[allow(dead_code)] pub name: String,
+    pub name: String,
 }
 
 impl Default for ModelPart {
