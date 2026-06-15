@@ -161,8 +161,8 @@ pub struct FrameData {
     pub uvs: [f32; 12],
     /// The chronologically calculated alpha transparency of the part, bounded between 0.0 and 1.0.
     pub opacity: f32,
-    /// A localized flag indicating whether the additive blending (glow) rasterization shader must be applied to this specific part.
-    pub glow: i32,
+    /// The glow mode of the part that determines how it blends with the pixels behind it, ranging from 0 to 3.
+    pub glow: u8,
 }
 
 /// Computes the complete world-space geometry for a unit at a specific temporal coordinate.
