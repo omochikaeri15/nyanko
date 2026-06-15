@@ -43,10 +43,22 @@ pub struct ModelPart {
 impl Default for ModelPart {
     fn default() -> Self {
         Self {
-            parent_id: -1, unit_id: 0, sprite_index: 0, drawing_layer: 0,
-            position_x: 0.0, position_y: 0.0, pivot_x: 0.0, pivot_y: 0.0,
-            scale_x: 1000.0, scale_y: 1000.0, rotation: 0.0, alpha: 1000.0,
-            glow_mode: 0, flip_x: false, flip_y: false, name: String::new(),
+            parent_id: -1,
+            unit_id: 0,
+            sprite_index: 0,
+            drawing_layer: 0,
+            position_x: 0.0,
+            position_y: 0.0,
+            pivot_x: 0.0,
+            pivot_y: 0.0,
+            scale_x: 1000.0,
+            scale_y: 1000.0,
+            rotation: 0.0,
+            alpha: 1000.0,
+            glow_mode: 0,
+            flip_x: false,
+            flip_y: false,
+            name: String::new(),
         }
     }
 }
@@ -72,7 +84,12 @@ pub struct Model {
 
 impl Default for Model {
     fn default() -> Self {
-        Self { parts: Vec::new(), version: 0, scale_unit: 1000.0, angle_unit: 3600.0, alpha_unit: 1000.0 }
+        Self {
+            parts: Vec::new(),
+            version: 0,
+            scale_unit: 1000.0,
+            angle_unit: 3600.0,
+            alpha_unit: 1000.0 }
     }
 }
 
@@ -159,7 +176,9 @@ impl Model {
                 rotation:      columns[10].trim().parse().unwrap_or(0.0),
                 alpha:         columns[11].trim().parse().unwrap_or(alpha_unit),
                 glow_mode:     columns[12].trim().parse().unwrap_or(0),
-                flip_x:        false, flip_y: false, name: raw_name,
+                flip_x:        false,
+                flip_y:        false,
+                name:          raw_name,
             });
         }
 
