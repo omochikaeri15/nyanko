@@ -1,11 +1,13 @@
+use std::fmt;
+use std::error::Error;
+
 use crate::pack::utils::ciphers::{
     decrypt_cbc, decrypt_ecb,
     encrypt_cbc, encrypt_ecb,
     get_md5_key
 };
+
 pub use crate::pack::utils::verify::check_integrity;
-use std::fmt;
-use std::error::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {

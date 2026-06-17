@@ -14,7 +14,7 @@ pub struct WorldTransform {
     pub sprite_index: usize,
     pub pivot: Vector,
     pub hidden: bool,
-    pub glow: i32,
+    pub glow: u8,
     pub part_index: usize,
 }
 
