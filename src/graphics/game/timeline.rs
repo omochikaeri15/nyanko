@@ -150,7 +150,7 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
         0 => start_value + (value_change * progress).trunc(),
         1 => if progress >= 1.0 { end_keyframe.value as f32 } else { start_value },
         2 => {
-            let ease_power = if start_keyframe.ease_power != 0 { start_keyframe.ease_power as f32 } else { 1.0 };
+            let ease_power = start_keyframe.ease_power as f32;
             let progress_clamped = progress.clamp(0.0, 1.0);
             let ease_factor = if ease_power >= 0.0 {
                 1.0 - (1.0 - progress_clamped.powf(ease_power)).sqrt()
