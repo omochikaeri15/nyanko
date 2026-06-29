@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 // Icon IDs Based On Positon
 pub const ICON_RESIST_WEAKEN: usize = 43;
 pub const ICON_RESIST_FREEZE: usize = 45;

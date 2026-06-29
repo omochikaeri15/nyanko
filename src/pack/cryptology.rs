@@ -1,6 +1,7 @@
 use std::fmt;
 use std::error::Error;
 
+use crate::common::utils::variant::Region;
 use crate::pack::utils::ciphers::{
     decrypt_cbc, decrypt_ecb,
     encrypt_cbc, encrypt_ecb,
@@ -33,9 +34,6 @@ impl fmt::Display for PackError {
 }
 
 impl Error for PackError {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Region { En, Jp, Kr, Tw }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackType { Standard, Server, ImageData }

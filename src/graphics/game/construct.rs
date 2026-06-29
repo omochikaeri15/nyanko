@@ -1,4 +1,4 @@
-use crate::graphics::animation::FrameData;
+use crate::graphics::actor::FrameData;
 use crate::graphics::game::transform::WorldTransform;
 use crate::graphics::data::imgcut::SpriteSheet;
 

@@ -121,7 +121,7 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
 
         let mut final_result: i64 = 0;
         let total_points = points.len();
-        let frame_int = frame.trunc() as i64;
+        let frame_int = frame.floor() as i64;
 
         for outer_index in 0..total_points {
             let (frame_j, val_j) = points[outer_index];
@@ -141,7 +141,7 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
     }
 
     let time_duration = (end_keyframe.frame - start_keyframe.frame) as f32;
-    let time_current = frame.trunc() - (start_keyframe.frame as f32);
+    let time_current = frame.floor() - (start_keyframe.frame as f32);
     let progress = time_current / time_duration;
     let start_value = start_keyframe.value as f32;
     let value_change = (end_keyframe.value - start_keyframe.value) as f32;

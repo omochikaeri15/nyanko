@@ -1,10 +1,10 @@
 use crate::graphics::game::{timeline, transform, construct};
 use crate::graphics::utils::boundary::calculate_animation_bounds;
 use crate::graphics::utils::periodicity::calculate_difference;
-use crate::graphics::data::imgcut::SpriteSheet;
 
+pub use crate::graphics::data::imgcut::{ImgRect, ImgVec2, SpriteCut, SpriteSheet};
 pub use crate::graphics::data::mamodel::Model;
-pub use crate::graphics::data::maanim::Animation as Anim;
+pub use crate::graphics::data::maanim::Animation;
 
 /// A comprehensive container representing a fully parsed in-game entity.
 ///
@@ -56,7 +56,7 @@ impl Unit {
     /// This computation is necessary for strict rendering culling and localized UI alignment.
     ///
     /// # Arguments
-    /// * `animations` - A slice of references to `Anim` objects representing the animation sequences to evaluate.
+    /// * `animations` - A slice of references to `Animation` objects representing the animation sequences to evaluate.
     /// * `tolerance` - A floating-point threshold between `0.0` and `1.0`. A value of `1.0` aggressively culls geometry resulting from scale extreme visual artifacts, while `0.0` strictly calculates the absolute mathematical outer limits.
     ///
     /// # Returns
@@ -64,7 +64,7 @@ impl Unit {
     /// Returns `None` if the unit evaluates to completely invisible across all provided frames.
     pub fn calculate_bounds(
         &self,
-        animations: &[&Anim],
+        animations: &[&Animation],
         tolerance: f32
     ) -> Option<(f32, f32, f32, f32)> {
         let tolerance = crate::graphics::utils::boundary::Tolerance::new(tolerance);
@@ -81,7 +81,7 @@ impl Unit {
     /// beneath the provided tolerance threshold.
     ///
     /// # Arguments
-    /// * `animation` - The specific `Anim` sequence timeline to analytically evaluate.
+    /// * `animation` - The specific `Animation` sequence timeline to analytically evaluate.
     /// * `tolerance` - The maximum allowable delta between two hierarchical matrix states to be considered a visual match.
     /// * `minimum_frame` - An optional floor constraint; the earliest chronological frame where a valid loop is permitted to begin.
     /// * `maximum_frame` - An optional ceiling constraint; if the search exceeds this frame without finding a match, the algorithm aborts.
@@ -92,7 +92,7 @@ impl Unit {
     /// Returns `None` if the timeline exhausts the `maximum_frame` or triggers user abortion without identifying a valid loop.
     pub fn calculate_cycle(
         &self,
-        animation: &Anim,
+        animation: &Animation,
         tolerance: f32,
         minimum_frame: Option<i32>,
         maximum_frame: Option<i32>,
@@ -173,7 +173,7 @@ pub struct FrameData {
 ///
 /// # Arguments
 /// * `unit` - A reference to the parsed `Unit` containing the base skeletal model and mapped texture atlas.
-/// * `anim` - An optional reference to an `Anim`. If `Some`, the timeline interpolates the model's parts to the specified frame. If `None`, the model remains statically evaluated in its default rest pose.
+/// * `anim` - An optional reference to an `Animation`. If `Some`, the timeline interpolates the model's parts to the specified frame. If `None`, the model remains statically evaluated in its default rest pose.
 /// * `frame` - The precise chronological floating-point time value to execute matrix evaluations against.
 ///
 /// # Returns
@@ -181,7 +181,7 @@ pub struct FrameData {
 /// sorted strictly by their chronological drawing order (z-index) layer.
 pub fn resolve_frame(
     unit: &Unit,
-    anim: Option<&Anim>,
+    anim: Option<&Animation>,
     frame: f32,
 ) -> Vec<FrameData> {
 
