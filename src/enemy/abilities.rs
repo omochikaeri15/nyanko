@@ -34,7 +34,7 @@ pub enum AttrUnit {
 pub enum Identity {
     SingleAttack, AreaAttack, TypeRed, TypeFloating, TypeDark, TypeMetal, TypeAngel,
     TypeAlien, TypeZombie, TypeRelic, TypeAku, TypeTraitless, TypeDojo, TypeStarredAlien,
-    TypeCatGod, TypeColossus, TypeBehemoth, TypeSage, TypeSupervillain, TypeWitch, TypeEva,
+    TypeCatGod, TypeColossus, TypeBehemoth, TypeSage, TypeKaijin, TypeWitch, TypeEva,
     Kamikaze, Stop, BaseDestroyer, WaveBlock, MultiHit, LongDistance, OmniStrike,
     WaveAttack, MiniWave, SurgeAttack, MiniSurge, DeathSurge, Explosion, CriticalHit,
     SavageBlow, Strengthen, Survive, Barrier, AkuShield, Burrow, Revive, Toxic, Drain,
@@ -249,12 +249,12 @@ pub static REGISTRY: &[Ability] = &[
         minus_one_is_inf: false,
     },
     Ability {
-        identity: Identity::TypeSupervillain,
+        identity: Identity::TypeKaijin,
         icon_id: Some(img015::ICON_SUPERVILLIAN),
         name: "",
         description: "",
         schema: &[],
-        attributes: |stats| if stats.type_supervillain > 0 { vec![("Active", 1, AttrUnit::None)] } else { vec![] },
+        attributes: |stats| if stats.type_kaijin > 0 { vec![("Active", 1, AttrUnit::None)] } else { vec![] },
         minus_one_is_inf: false,
     },
     Ability {
