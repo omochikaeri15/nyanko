@@ -2,7 +2,7 @@
 #[cfg(feature = "pack")] pub mod pack;
 // TODO: #[cfg(feature = "event")] pub mod event; [event data stuff like bcdd does]
 // TODO: #[cfg(feature = "unite")] pub mod unite; [decrypt "arc" nintendo files and handle formats such as btrx]
-// TODO: #[cfg(feature = "bcu")] pub mod bcu; [decrypt bcuzip & bcuzips, convert bcu formats to game formats]
+#[cfg(feature = "bcu")] pub mod bcu;
 #[cfg(feature = "graphics")] pub mod graphics;
 pub mod cat;
 pub mod enemy;
