@@ -1,8 +1,9 @@
 use aes::Aes128;
-use cbc::Decryptor;
-use cipher::{KeyIvInit, BlockModeDecrypt};
 use block_padding::NoPadding;
-use md5::{Md5, Digest};
+use cbc::Decryptor;
+use cipher::{BlockModeDecrypt, KeyIvInit};
+use md5::{Digest, Md5};
+
 use crate::bcu::cryptology::Error;
 
 type Aes128Cbc = Decryptor<Aes128>;

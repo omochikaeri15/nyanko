@@ -1,10 +1,10 @@
-use crate::graphics::game::{timeline, transform, construct};
-use crate::graphics::utils::boundary::calculate_animation_bounds;
-use crate::graphics::utils::periodicity::calculate_difference;
+use super::game::{construct, timeline, transform};
+use super::utils::boundary::calculate_animation_bounds;
+use super::utils::periodicity::calculate_difference;
 
-pub use crate::graphics::data::imgcut::{ImgRect, ImgVec2, SpriteCut, SpriteSheet};
-pub use crate::graphics::data::mamodel::Model;
-pub use crate::graphics::data::maanim::Animation;
+pub use super::data::maanim::Animation;
+pub use super::data::imgcut::{ImgRect, ImgVec2, SpriteCut, SpriteSheet};
+pub use super::data::mamodel::Model;
 
 /// A comprehensive container representing a fully parsed in-game entity.
 ///

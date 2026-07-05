@@ -1,5 +1,6 @@
-use std::fmt;
 use std::error;
+use std::fmt;
+
 use crate::common::utils::csv;
 
 /// Represents errors that can occur during the parsing of enemy picture book descriptions.

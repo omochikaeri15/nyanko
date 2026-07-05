@@ -4,16 +4,16 @@
 //! parsers, structures, and error types required to process a unit's mechanical
 //! and visual data.
 
-pub use crate::cat::data::unitexplanation::{UnitExplanation, UnitExplanationError};
-pub use crate::cat::data::unitid::{Battle, BattleError};
-pub use crate::cat::data::unitlevel::{LevelCurve, LevelError};
-pub use crate::cat::data::skillacquisition::{Talent, TalentGroup, SkillAcquisitionError};
-pub use crate::cat::data::unitbuy::{UnitBuy, UnitBuyError};
-pub use crate::cat::data::unitevolve::{UnitEvolve, UnitEvolveError};
-pub use crate::cat::data::skilllevel::{TalentCost, SkillLevelError};
-pub use crate::cat::data::skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
-
 use std::collections::BTreeMap;
+
+pub use super::data::skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
+pub use super::data::skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
+pub use super::data::skilllevel::{SkillLevelError, TalentCost};
+pub use super::data::unitbuy::{UnitBuy, UnitBuyError};
+pub use super::data::unitevolve::{UnitEvolve, UnitEvolveError};
+pub use super::data::unitexplanation::{UnitExplanation, UnitExplanationError};
+pub use super::data::unitid::{Battle, BattleError};
+pub use super::data::unitlevel::{LevelCurve, LevelError};
 
 /// The comprehensive, fully-aggregated representation of a Cat unit.
 ///

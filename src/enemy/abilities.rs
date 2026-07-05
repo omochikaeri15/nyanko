@@ -4,8 +4,9 @@
 //! with dynamically evaluated combat mechanics. It strictly maps raw values to
 //! strongly-typed attributes and handles engine quirks.
 
-use crate::enemy::unit::Battle;
 use crate::common::data::img015;
+
+use super::unit::Battle;
 
 /// Represents the mathematical or logical unit of measurement for an ability's attribute.
 ///

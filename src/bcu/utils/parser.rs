@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+
 use crate::bcu::cryptology::Error;
 
 pub fn take_bytes(data: &[u8], amount: usize) -> Result<(&[u8], &[u8]), Error> {

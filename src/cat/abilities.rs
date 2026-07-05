@@ -1,5 +1,6 @@
-use crate::cat::unit::{Battle, TalentGroup};
 use crate::common::data::img015;
+
+use super::unit::{Battle, TalentGroup};
 
 /// Represents the mathematical or logical unit of measurement for an ability's attribute.
 ///

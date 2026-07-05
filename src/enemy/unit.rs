@@ -4,9 +4,9 @@
 //! parsers, structures, and error types required to process an enemy's mechanical
 //! and visual data.
 
-pub use crate::enemy::data::t_unit::{Battle, BattleError};
-pub use crate::enemy::data::enemyname::{EnemyName, EnemyNameError};
-pub use crate::enemy::data::enemypicturebook::{EnemyPictureBook, EnemyPictureBookError};
+pub use super::data::t_unit::{Battle, BattleError};
+pub use super::data::enemyname::{EnemyName, EnemyNameError};
+pub use super::data::enemypicturebook::{EnemyPictureBook, EnemyPictureBookError};
 
 /// The comprehensive, fully-aggregated representation of an Enemy unit.
 ///
