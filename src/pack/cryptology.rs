@@ -199,7 +199,7 @@ mod tests {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::common::Region;
+        use crate::common::utils::variant::Region;
 
         #[test]
         fn test_list_manifest_roundtrip() {

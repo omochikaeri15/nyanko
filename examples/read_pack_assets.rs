@@ -3,7 +3,7 @@ mod example {
     use std::fs;
     use std::path::Path;
     use nyanko::pack::cryptology::{Keys, decrypt_list, decrypt_chunk};
-    use nyanko::common::Region;
+    use nyanko::common::utils::variant::Region;
 
     /// The 16-byte hex-encoded key for regional asset decryption.
     const TARGET_KEY_HEX: &str = "0123456789abcdef0123456789abcdef";
