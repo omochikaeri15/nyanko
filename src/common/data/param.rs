@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::common::utils::csv;
 
+/// Represents an error encountered during the parameter deserialization phase.
 #[derive(Debug)]
 pub enum ParamError {
+    /// Indicates that the provided byte payload yielded no actionable key-value pairs.
     EmptyFile,
 }
 
@@ -17,93 +20,104 @@ impl fmt::Display for ParamError {
 
 impl std::error::Error for ParamError {}
 
+/// Represents the deserialized state of the engine's global parameters.
+///
+/// Contains explicitly mapped raw integer values for core combat, UI, and event constants.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Param {
-    pub unknown_1: i32, // slot_font_size  18
-    pub unknown_2: i32, // slot_bg_y  100
-    pub unknown_3: i32, // slot_name_margin_top  2
-    pub unknown_4: i32, // slot_name_margin_left  11
-    pub unknown_5: i32, // slot_page_y_offset  31
-    pub unknown_6: i32, // slot_font_size2  14
-    pub unknown_7: i32, // slot_name_margin_top2  9
-    pub unknown_8: i32, // slot_name_margin_left2  10
-    pub unknown_9: i32, // battle_wave_s_st  20
-    pub unknown_10: i32, // battle_wave_s_inter  2
-    pub unknown_11: i32, // battle_wave_s_frame1  2
-    pub unknown_12: i32, // battle_wave_s_frame2  5
-    pub unknown_13: i32, // battle_slot_2lines_line  95
-    pub unknown_14: i32, // battle_slot_2lines_y  -15
-    pub unknown_15: i32, // battle_zoom_y  520
-    pub unknown_16: i32, // battle_zoom_slot_y  500
-    pub unknown_17: i32, // battle_zoom_castle_y  20
-    pub hold_cat_details_time: i32, // battle_slot_desc_wait  14
-    pub time_until_death_surge: i32, // battle_death_volcano_time  21
-    pub behemoth_slayer_attack_multiplier: f32, // battle_super_beast_hunter  2500
-    pub behemoth_slayer_defense_multiplier: f32, // battle_super_beast_hunter_df  600
-    pub unknown_22: i32, // boost_speed  3
-    pub logo_superfeline_roll_timer: i32, // logo_gimmick_sec  20
-    pub logo_superfeline_chance_success: i32, // logo_gimmick_probability  25
-    pub logo_superfeline_failure_increase: i32, // logo_gimmick_increase  10
-    pub unknown_26: i32, // battle_demon_summon_frame  50
-    pub unknown_27: i32, // battle_demon_summon_se_frame  18
-    pub unknown_28: i32, // battle_castle_x0  130
-    pub unknown_29: i32, // battle_castle_y0  -30
-    pub unknown_30: i32, // battle_castle_x1  -130
-    pub unknown_31: i32, // battle_castle_y1  -30
-    pub unknown_32: i32, // battle_castle_x2  0
-    pub unknown_33: i32, // battle_castle_y2  0
-    pub volume_setting_percent_small: i32, // volume_percentage_s  20
-    pub volume_setting_percent_medium: i32, // volume_percentage_m  50
-    pub volume_setting_percent_large: i32, // volume_percentage_l  100
-    pub spirit_position_offset: i32, // summon_position  -150
-    pub sage_type_resist_weaken: f32, // battle_super_sage_weaken  70
-    pub sage_type_resist_freeze: f32, // battle_super_sage_freeze  70
-    pub sage_type_resist_slow: f32, // battle_super_sage_slow  70
-    pub sage_type_resist_curse: f32, // battle_super_sage_curse  70
-    pub sage_type_resist_knockback: f32, // battle_super_sage_knockback  70
-    pub sage_slayer_resist_weaken: f32, // battle_super_sage_hunter_weaken  70
-    pub sage_slayer_resist_freeze: f32, // battle_super_sage_hunter_freeze  70
-    pub sage_slayer_resist_slow: f32, // battle_super_sage_hunter_slow  70
-    pub sage_slayer_resist_curse: f32, // battle_super_sage_hunter_curse  70
-    pub sage_slayer_resist_other: f32, // battle_super_sage_hunter_knockback  70
-    pub sage_slayer_resist_warp: f32, // battle_super_sage_hunter_warp  70
-    pub sage_slayer_attack_multiplier: f32, // battle_super_sage_hunter_damage1  1200
-    pub sage_slayer_defense_multiplier: f32, // battle_super_sage_hunter_damage2  500
-    pub metal_killer_hitpoint_behavior: i32, // battle_metal_killer_hp_type  1
-    pub unknown_52: i32, // catbase_banner1  3
-    pub unknown_53: i32, // catbase_banner2  -2
-    pub story_sequence_hold_speed: i32, // story_fast_forward_speed  3
-    pub explosion_start_time: i32, // battle_explosion_frame1  11
-    pub explosion_hitbox_duration: i32, // battle_explosion_frame2  15
-    pub explosion_delay_before_deletion: i32, // battle_explosion_frame3  0
-    pub explosion_delay_until_spike: i32, // battle_explosion_frame4  10
-    pub explosion_big_width: f32, // battle_explosion_width1  600
-    pub explosion_medium_width: f32, // battle_explosion_width2  400
-    pub explosion_small_width: f32, // battle_explosion_width3  400
-    pub explosion_big_damage_multiplier: f32, // battle_explosion_damage1  100
-    pub explosion_medium_damage_multiplier: f32, // battle_explosion_damage2  70
-    pub explosion_small_damage_multiplier: f32, // battle_explosion_damage3  40
-    pub unknown_65: i32, // battle_af_death_volcano_distance  800
-    pub unknown_66: i32, // battle_af_death_volcano_width  1200
-    pub unknown_67: i32, // battle_af_condition_production_0  2
-    pub unknown_68: i32, // battle_af_condition_production_1  2
-    pub unknown_69: i32, // battle_af_condition_production_2  2
-    pub unknown_70: i32, // battle_af_condition_production_3  2
-    pub unknown_71: i32, // battle_af_condition_production_4  2
-    pub unknown_72: i32, // battle_af_condition_production_5  2
-    pub unknown_73: i32, // battle_af_condition_production_type  0
-    pub unknown_74: i32, // autoset_level_param  3
-    pub unknown_75: i32, // autoset_must_param  5
-    pub unknown_76: i32, // autoset_cut_score_rate  20
-    pub unknown_77: i32, // autoset_non_target_offset  340
-    pub unknown_78: i32, // battle_powerup_kill_enemy  10
-    pub comeback_treasure_festival_days: i32, // comeback_treasure_day  14
-    pub unknown_80: i32, // update_version_notification_interval  8
-    pub unknown_81: i32, // battle_sentai_recast  75
+    pub unknown_1: i32,
+    pub unknown_2: i32,
+    pub unknown_3: i32,
+    pub unknown_4: i32,
+    pub unknown_5: i32,
+    pub unknown_6: i32,
+    pub unknown_7: i32,
+    pub unknown_8: i32,
+    pub unknown_9: i32,
+    pub unknown_10: i32,
+    pub unknown_11: i32,
+    pub unknown_12: i32,
+    pub unknown_13: i32,
+    pub unknown_14: i32,
+    pub unknown_15: i32,
+    pub unknown_16: i32,
+    pub unknown_17: i32,
+    pub hold_cat_details_time: i32,
+    pub time_until_death_surge: i32,
+    pub behemoth_slayer_attack_multiplier: i32,
+    pub behemoth_slayer_defense_multiplier: i32,
+    pub unknown_22: i32,
+    pub logo_superfeline_roll_timer: i32,
+    pub logo_superfeline_chance_success: i32,
+    pub logo_superfeline_failure_increase: i32,
+    pub unknown_26: i32,
+    pub unknown_27: i32,
+    pub unknown_28: i32,
+    pub unknown_29: i32,
+    pub unknown_30: i32,
+    pub unknown_31: i32,
+    pub unknown_32: i32,
+    pub unknown_33: i32,
+    pub volume_setting_percent_small: i32,
+    pub volume_setting_percent_medium: i32,
+    pub volume_setting_percent_large: i32,
+    pub spirit_position_offset: i32,
+    pub sage_type_resist_weaken: i32,
+    pub sage_type_resist_freeze: i32,
+    pub sage_type_resist_slow: i32,
+    pub sage_type_resist_curse: i32,
+    pub sage_type_resist_knockback: i32,
+    pub sage_slayer_resist_weaken: i32,
+    pub sage_slayer_resist_freeze: i32,
+    pub sage_slayer_resist_slow: i32,
+    pub sage_slayer_resist_curse: i32,
+    pub sage_slayer_resist_other: i32,
+    pub sage_slayer_resist_warp: i32,
+    pub sage_slayer_attack_multiplier: i32,
+    pub sage_slayer_defense_multiplier: i32,
+    pub metal_killer_hitpoint_behavior: i32,
+    pub unknown_52: i32,
+    pub unknown_53: i32,
+    pub story_sequence_hold_speed: i32,
+    pub explosion_start_time: i32,
+    pub explosion_hitbox_duration: i32,
+    pub explosion_delay_before_deletion: i32,
+    pub explosion_delay_until_spike: i32,
+    pub explosion_big_width: i32,
+    pub explosion_medium_width: i32,
+    pub explosion_small_width: i32,
+    pub explosion_big_damage_multiplier: i32,
+    pub explosion_medium_damage_multiplier: i32,
+    pub explosion_small_damage_multiplier: i32,
+    pub unknown_65: i32,
+    pub unknown_66: i32,
+    pub unknown_67: i32,
+    pub unknown_68: i32,
+    pub unknown_69: i32,
+    pub unknown_70: i32,
+    pub unknown_71: i32,
+    pub unknown_72: i32,
+    pub unknown_73: i32,
+    pub unknown_74: i32,
+    pub unknown_75: i32,
+    pub unknown_76: i32,
+    pub unknown_77: i32,
+    pub unknown_78: i32,
+    pub comeback_treasure_festival_days: i32,
+    pub unknown_80: i32,
+    pub unknown_81: i32,
+    /// Captures any trailing parametric data outside the scope of explicitly mapped fields.
     pub rest: Vec<i32>,
 }
 
 impl Param {
+    /// Deserializes raw byte streams into a structured `Param` instance.
+    ///
+    /// # Arguments
+    /// * `bytes` - A polymorphic byte slice reference representing the parameters payload.
+    ///
+    /// # Returns
+    /// A populated `Param` struct, or a `ParamError` if the payload is structurally invalid.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, ParamError> {
         parse_inner(bytes.as_ref())
     }
@@ -111,112 +125,122 @@ impl Param {
 
 fn parse_inner(bytes: &[u8]) -> Result<Param, ParamError> {
     let file_content = csv::scrub(bytes);
-    let mut values = Vec::new();
+
+    let mut map = HashMap::with_capacity(150);
+    let mut raw_ordered_values = Vec::with_capacity(150);
 
     for line in file_content.lines() {
-        if line.trim().is_empty() { continue; }
-        if let Some(val_str) = line.split_whitespace().last() {
-            if let Ok(val) = val_str.parse::<i32>() {
-                values.push(val);
-            } else {
-                values.push(0);
-            }
+        let clean_line = line.split("//").next().unwrap_or("").trim();
+
+        if clean_line.is_empty() {
+            continue;
         }
+
+        let mut parts = clean_line.split_whitespace();
+        let Some(key) = parts.next() else { continue; };
+        let Some(val_str) = parts.last() else { continue; };
+
+        let val = val_str.parse::<i32>().unwrap_or(0);
+
+        map.insert(key, val);
+        raw_ordered_values.push(val);
     }
 
-    if values.is_empty() {
+    if map.is_empty() {
         return Err(ParamError::EmptyFile);
     }
 
-    let get_val = |index: usize| -> i32 { values.get(index).copied().unwrap_or(0) };
+    let get_val = |target_key: &str| -> i32 {
+        map.get(target_key).copied().unwrap_or(0)
+    };
 
-    let mut rest_vector = Vec::new();
-    if values.len() > 81 {
-        rest_vector.extend_from_slice(&values[81..]);
+    let mut rest = Vec::new();
+    if raw_ordered_values.len() > 81 {
+        rest.extend_from_slice(&raw_ordered_values[81..]);
     }
 
     Ok(Param {
-        unknown_1: get_val(0),
-        unknown_2: get_val(1),
-        unknown_3: get_val(2),
-        unknown_4: get_val(3),
-        unknown_5: get_val(4),
-        unknown_6: get_val(5),
-        unknown_7: get_val(6),
-        unknown_8: get_val(7),
-        unknown_9: get_val(8),
-        unknown_10: get_val(9),
-        unknown_11: get_val(10),
-        unknown_12: get_val(11),
-        unknown_13: get_val(12),
-        unknown_14: get_val(13),
-        unknown_15: get_val(14),
-        unknown_16: get_val(15),
-        unknown_17: get_val(16),
-        hold_cat_details_time: get_val(17),
-        time_until_death_surge: get_val(18),
-        behemoth_slayer_attack_multiplier: get_val(19) as f32 / 1000.0,
-        behemoth_slayer_defense_multiplier: get_val(20) as f32 / 1000.0,
-        unknown_22: get_val(21),
-        logo_superfeline_roll_timer: get_val(22),
-        logo_superfeline_chance_success: get_val(23),
-        logo_superfeline_failure_increase: get_val(24),
-        unknown_26: get_val(25),
-        unknown_27: get_val(26),
-        unknown_28: get_val(27),
-        unknown_29: get_val(28),
-        unknown_30: get_val(29),
-        unknown_31: get_val(30),
-        unknown_32: get_val(31),
-        unknown_33: get_val(32),
-        volume_setting_percent_small: get_val(33),
-        volume_setting_percent_medium: get_val(34),
-        volume_setting_percent_large: get_val(35),
-        spirit_position_offset: get_val(36),
-        sage_type_resist_weaken: get_val(37) as f32 / 100.0,
-        sage_type_resist_freeze: get_val(38) as f32 / 100.0,
-        sage_type_resist_slow: get_val(39) as f32 / 100.0,
-        sage_type_resist_curse: get_val(40) as f32 / 100.0,
-        sage_type_resist_knockback: get_val(41) as f32 / 100.0,
-        sage_slayer_resist_weaken: get_val(42) as f32 / 100.0,
-        sage_slayer_resist_freeze: get_val(43) as f32 / 100.0,
-        sage_slayer_resist_slow: get_val(44) as f32 / 100.0,
-        sage_slayer_resist_curse: get_val(45) as f32 / 100.0,
-        sage_slayer_resist_other: get_val(46) as f32 / 100.0,
-        sage_slayer_resist_warp: get_val(47) as f32 / 100.0,
-        sage_slayer_attack_multiplier: get_val(48) as f32 / 1000.0,
-        sage_slayer_defense_multiplier: get_val(49) as f32 / 1000.0,
-        metal_killer_hitpoint_behavior: get_val(50),
-        unknown_52: get_val(51),
-        unknown_53: get_val(52),
-        story_sequence_hold_speed: get_val(53),
-        explosion_start_time: get_val(54),
-        explosion_hitbox_duration: get_val(55),
-        explosion_delay_before_deletion: get_val(56),
-        explosion_delay_until_spike: get_val(57),
-        explosion_big_width: get_val(58) as f32 / 4.0,
-        explosion_medium_width: get_val(59) as f32 / 4.0,
-        explosion_small_width: get_val(60) as f32 / 4.0,
-        explosion_big_damage_multiplier: get_val(61) as f32 / 100.0,
-        explosion_medium_damage_multiplier:  get_val(62) as f32 / 100.0,
-        explosion_small_damage_multiplier: get_val(63) as f32 / 100.0,
-        unknown_65: get_val(64),
-        unknown_66: get_val(65),
-        unknown_67: get_val(66),
-        unknown_68: get_val(67),
-        unknown_69: get_val(68),
-        unknown_70: get_val(69),
-        unknown_71: get_val(70),
-        unknown_72: get_val(71),
-        unknown_73: get_val(72),
-        unknown_74: get_val(73),
-        unknown_75: get_val(74),
-        unknown_76: get_val(75),
-        unknown_77: get_val(76),
-        unknown_78: get_val(77),
-        comeback_treasure_festival_days: get_val(78),
-        unknown_80: get_val(79),
-        unknown_81: get_val(80),
-        rest: rest_vector,
+        unknown_1: get_val("slot_font_size"),
+        unknown_2: get_val("slot_bg_y"),
+        unknown_3: get_val("slot_name_margin_top"),
+        unknown_4: get_val("slot_name_margin_left"),
+        unknown_5: get_val("slot_page_y_offset"),
+        unknown_6: get_val("slot_font_size2"),
+        unknown_7: get_val("slot_name_margin_top2"),
+        unknown_8: get_val("slot_name_margin_left2"),
+        unknown_9: get_val("battle_wave_s_st"),
+        unknown_10: get_val("battle_wave_s_inter"),
+        unknown_11: get_val("battle_wave_s_frame1"),
+        unknown_12: get_val("battle_wave_s_frame2"),
+        unknown_13: get_val("battle_slot_2lines_line"),
+        unknown_14: get_val("battle_slot_2lines_y"),
+        unknown_15: get_val("battle_zoom_y"),
+        unknown_16: get_val("battle_zoom_slot_y"),
+        unknown_17: get_val("battle_zoom_castle_y"),
+        hold_cat_details_time: get_val("battle_slot_desc_wait"),
+        time_until_death_surge: get_val("battle_death_volcano_time"),
+        behemoth_slayer_attack_multiplier: get_val("battle_super_beast_hunter"),
+        behemoth_slayer_defense_multiplier: get_val("battle_super_beast_hunter_df"),
+        unknown_22: get_val("boost_speed"),
+        logo_superfeline_roll_timer: get_val("logo_gimmick_sec"),
+        logo_superfeline_chance_success: get_val("logo_gimmick_probability"),
+        logo_superfeline_failure_increase: get_val("logo_gimmick_increase"),
+        unknown_26: get_val("battle_demon_summon_frame"),
+        unknown_27: get_val("battle_demon_summon_se_frame"),
+        unknown_28: get_val("battle_castle_x0"),
+        unknown_29: get_val("battle_castle_y0"),
+        unknown_30: get_val("battle_castle_x1"),
+        unknown_31: get_val("battle_castle_y1"),
+        unknown_32: get_val("battle_castle_x2"),
+        unknown_33: get_val("battle_castle_y2"),
+        volume_setting_percent_small: get_val("volume_percentage_s"),
+        volume_setting_percent_medium: get_val("volume_percentage_m"),
+        volume_setting_percent_large: get_val("volume_percentage_l"),
+        spirit_position_offset: get_val("summon_position"),
+        sage_type_resist_weaken: get_val("battle_super_sage_weaken"),
+        sage_type_resist_freeze: get_val("battle_super_sage_freeze"),
+        sage_type_resist_slow: get_val("battle_super_sage_slow"),
+        sage_type_resist_curse: get_val("battle_super_sage_curse"),
+        sage_type_resist_knockback: get_val("battle_super_sage_knockback"),
+        sage_slayer_resist_weaken: get_val("battle_super_sage_hunter_weaken"),
+        sage_slayer_resist_freeze: get_val("battle_super_sage_hunter_freeze"),
+        sage_slayer_resist_slow: get_val("battle_super_sage_hunter_slow"),
+        sage_slayer_resist_curse: get_val("battle_super_sage_hunter_curse"),
+        sage_slayer_resist_other: get_val("battle_super_sage_hunter_knockback"),
+        sage_slayer_resist_warp: get_val("battle_super_sage_hunter_warp"),
+        sage_slayer_attack_multiplier: get_val("battle_super_sage_hunter_damage1"),
+        sage_slayer_defense_multiplier: get_val("battle_super_sage_hunter_damage2"),
+        metal_killer_hitpoint_behavior: get_val("battle_metal_killer_hp_type"),
+        unknown_52: get_val("catbase_banner1"),
+        unknown_53: get_val("catbase_banner2"),
+        story_sequence_hold_speed: get_val("story_fast_forward_speed"),
+        explosion_start_time: get_val("battle_explosion_frame1"),
+        explosion_hitbox_duration: get_val("battle_explosion_frame2"),
+        explosion_delay_before_deletion: get_val("battle_explosion_frame3"),
+        explosion_delay_until_spike: get_val("battle_explosion_frame4"),
+        explosion_big_width: get_val("battle_explosion_width1"),
+        explosion_medium_width: get_val("battle_explosion_width2"),
+        explosion_small_width: get_val("battle_explosion_width3"),
+        explosion_big_damage_multiplier: get_val("battle_explosion_damage1"),
+        explosion_medium_damage_multiplier: get_val("battle_explosion_damage2"),
+        explosion_small_damage_multiplier: get_val("battle_explosion_damage3"),
+        unknown_65: get_val("battle_af_death_volcano_distance"),
+        unknown_66: get_val("battle_af_death_volcano_width"),
+        unknown_67: get_val("battle_af_condition_production_0"),
+        unknown_68: get_val("battle_af_condition_production_1"),
+        unknown_69: get_val("battle_af_condition_production_2"),
+        unknown_70: get_val("battle_af_condition_production_3"),
+        unknown_71: get_val("battle_af_condition_production_4"),
+        unknown_72: get_val("battle_af_condition_production_5"),
+        unknown_73: get_val("battle_af_condition_production_type"),
+        unknown_74: get_val("autoset_level_param"),
+        unknown_75: get_val("autoset_must_param"),
+        unknown_76: get_val("autoset_cut_score_rate"),
+        unknown_77: get_val("autoset_non_target_offset"),
+        unknown_78: get_val("battle_powerup_kill_enemy"),
+        comeback_treasure_festival_days: get_val("comeback_treasure_day"),
+        unknown_80: get_val("update_version_notification_interval"),
+        unknown_81: get_val("battle_sentai_recast"),
+        rest,
     })
 }
