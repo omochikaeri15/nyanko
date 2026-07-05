@@ -16,3 +16,26 @@ pub fn calculate_difference(
         diff
     }).sum()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_difference_identical() {
+        let state_a = vec![([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 20.0, 1.0], 1.0)];
+        let state_b = vec![([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 20.0, 1.0], 1.0)];
+
+        let diff = calculate_difference(&state_a, &state_b);
+        assert_eq!(diff, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_difference_variance() {
+        let state_a = vec![([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 20.0, 1.0], 1.0)];
+        let state_b = vec![([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 20.0, 1.0], 0.5)];
+
+        let diff = calculate_difference(&state_a, &state_b);
+        assert_eq!(diff, 132.5);
+    }
+}

@@ -62,3 +62,21 @@ pub fn calculate_weight(path: &Path, temp_apk_dirs: &[PathBuf]) -> u64 {
 
     weight
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_chronology_weights() {
+        let temp_apk_dirs = vec![PathBuf::from("/tmp/nyanko_apk_extract")];
+        assert_eq!(calculate_weight(Path::new("DataLocal.pack"), &temp_apk_dirs), 0);
+        assert_eq!(calculate_weight(Path::new("UpdateLocal.pack"), &temp_apk_dirs), 0);
+        assert_eq!(calculate_weight(Path::new("ENServer.pack"), &temp_apk_dirs), 20_069);
+        assert_eq!(calculate_weight(Path::new("game_14_2.pack"), &temp_apk_dirs), 100_001_402);
+        assert_eq!(calculate_weight(Path::new("patch/custom_ui.pack"), &temp_apk_dirs), 5_000);
+        let timestamp_path = Path::new("/tmp/nyanko_apk_extract/15040000.pack");
+        assert_eq!(calculate_weight(timestamp_path, &temp_apk_dirs), 500_005_000);
+    }
+}

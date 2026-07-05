@@ -211,3 +211,34 @@ pub fn scan_bounds(
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bounding_box_union() {
+        let box_a = BoundingBox { min_x: 0.0, min_y: 0.0, max_x: 10.0, max_y: 10.0 };
+        let box_b = BoundingBox { min_x: 5.0, min_y: -5.0, max_x: 15.0, max_y: 5.0 };
+
+        let combined = box_a.union(&box_b);
+
+        assert_eq!(combined.min_x, 0.0);
+        assert_eq!(combined.min_y, -5.0);
+        assert_eq!(combined.max_x, 15.0);
+        assert_eq!(combined.max_y, 10.0);
+        assert_eq!(combined.width(), 15.0);
+        assert_eq!(combined.height(), 15.0);
+    }
+
+    #[test]
+    fn test_tolerance_clamping() {
+        let max_tolerance = Tolerance::new(1.0);
+        assert_eq!(max_tolerance.minimum_opacity, 0.25);
+        assert_eq!(max_tolerance.maximum_scale, 3.0);
+
+        let clamped_tolerance = Tolerance::new(5.0);
+        assert_eq!(clamped_tolerance.minimum_opacity, 0.25);
+        assert_eq!(clamped_tolerance.maximum_scale, 3.0);
+    }
+}

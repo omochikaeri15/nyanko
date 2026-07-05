@@ -181,3 +181,92 @@ pub fn decrypt_list(data: &[u8]) -> Result<String, PackError> {
 pub fn encrypt_list(data: &str) -> Result<Vec<u8>, PackError> {
     encrypt_ecb(data.as_bytes(), &get_md5_key("pack"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_manifest_roundtrip() {
+        let original_manifest = "0,DataLocal.pack\n1,ui_001.png\n2,unit_01.csv";
+        let encrypted_bytes = encrypt_list(original_manifest)
+            .expect("Failed to encrypt synthetic manifest");
+        let decrypted_manifest = decrypt_list(&encrypted_bytes)
+            .expect("Failed to decrypt synthetic manifest");
+        assert_eq!(original_manifest, decrypted_manifest);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::common::Region;
+
+        #[test]
+        fn test_list_manifest_roundtrip() {
+            let original_manifest = "0,DataLocal.pack\n1,ui_001.png\n2,unit_01.csv";
+            let encrypted_bytes = encrypt_list(original_manifest)
+                .expect("Failed to encrypt synthetic manifest");
+            let decrypted_manifest = decrypt_list(&encrypted_bytes)
+                .expect("Failed to decrypt synthetic manifest");
+
+            assert_eq!(original_manifest, decrypted_manifest);
+        }
+
+        #[test]
+        fn test_standard_chunk_roundtrip() {
+            let key_hex = "0123456789abcdef0123456789abcdef";
+            let iv_hex  = "fedcba9876543210fedcba9876543210";
+            let keys = Keys::parse(&[(Region::En, key_hex, iv_hex)])
+                .expect("Failed to parse synthetic keys");
+            let cipher = &keys.ciphers[0];
+            let internal_filename = "unit_01.csv";
+            let original_payload = format!("HP,ATK,RANGE\n100,50,250");
+
+            let encrypted_chunk = encrypt_chunk(
+                original_payload.as_bytes(),
+                PackType::Standard,
+                Some(&cipher.key),
+                Some(&cipher.iv)
+            ).expect("Failed to encrypt standard CBC chunk");
+
+            let (decrypted_chunk, region) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
+
+            assert_eq!(region, Some(Region::En), "Did not correctly match the EN region CBC key");
+            assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
+        }
+
+        #[test]
+        fn test_server_chunk_roundtrip() {
+            let keys = Keys::default();
+
+            let internal_filename = "server_data.json";
+            let original_payload = "{\"status\": \"ok\", \"version\": 140200}";
+            let encrypted_chunk = encrypt_chunk(
+                original_payload.as_bytes(),
+                PackType::Server,
+                None,
+                None
+            ).expect("Failed to encrypt server ECB chunk");
+
+            let (decrypted_chunk, region) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
+
+            assert_eq!(region, None, "Server packs should return None for Region");
+            assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
+        }
+
+        #[test]
+        fn test_image_roundtrip() {
+            let dummy_image_data: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+            let internal_filename = "ui_001.png";
+
+            let encrypted = encrypt_chunk(dummy_image_data, PackType::ImageData, None, None)
+                .expect("Failed image pass-through");
+
+            let keys = Keys::default();
+            let (decrypted, region) = decrypt_chunk(&encrypted, internal_filename, &keys);
+
+            assert_eq!(region, None);
+            assert_eq!(dummy_image_data, decrypted.as_slice());
+        }
+    }
+}

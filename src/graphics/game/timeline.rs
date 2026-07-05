@@ -177,3 +177,66 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
 
     Some(interpolated_value.trunc())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graphics::data::maanim::{Keyframe, AnimModification};
+
+    #[test]
+    fn test_linear_interpolation() {
+        let curve = AnimModification {
+            part_id: 0,
+            modification_type: 4,
+            loop_count: 1,
+            min_frame: 0,
+            max_frame: 10,
+            keyframes: vec![
+                Keyframe { frame: 0, value: 0, ease_mode: 0, ease_power: 0 },
+                Keyframe { frame: 10, value: 100, ease_mode: 0, ease_power: 0 },
+            ],
+        };
+
+        let result = interpolate_curve(&curve, 5.0, false);
+        assert_eq!(result, Some(50.0));
+    }
+
+    #[test]
+    fn test_discrete_interpolation() {
+        let curve = AnimModification {
+            part_id: 0,
+            modification_type: 2,
+            loop_count: 1,
+            min_frame: 0,
+            max_frame: 10,
+            keyframes: vec![
+                Keyframe { frame: 0, value: 1, ease_mode: 0, ease_power: 0 },
+                Keyframe { frame: 10, value: 2, ease_mode: 0, ease_power: 0 },
+            ],
+        };
+
+        let result = interpolate_curve(&curve, 5.0, true);
+        assert_eq!(result, Some(1.0));
+    }
+
+    #[test]
+    fn test_out_of_bounds_frames() {
+        let curve = AnimModification {
+            part_id: 0,
+            modification_type: 4,
+            loop_count: 1,
+            min_frame: 10,
+            max_frame: 20,
+            keyframes: vec![
+                Keyframe { frame: 10, value: 50, ease_mode: 0, ease_power: 0 },
+                Keyframe { frame: 20, value: 100, ease_mode: 0, ease_power: 0 },
+            ],
+        };
+
+        let pre_result = interpolate_curve(&curve, 5.0, false);
+        assert_eq!(pre_result, None);
+
+        let post_result = interpolate_curve(&curve, 25.0, false);
+        assert_eq!(post_result, Some(100.0));
+    }
+}

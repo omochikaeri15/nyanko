@@ -41,6 +41,9 @@ bcu = [
     "dep:serde_json"
 ]
 
+[lib]
+doctest = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
