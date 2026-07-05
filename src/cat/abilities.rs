@@ -1206,8 +1206,8 @@ pub static REGISTRY: &[Ability] = &[
         schema: &[],
         attributes: |_| vec![],
         apply_talent: Some(|stats, percent, _, _| {
-            let time_reduction = (stats.time_between_attacks as f32 * percent as f32 / 100.0).round() as i32;
-            stats.time_between_attacks = stats.time_between_attacks.saturating_sub(time_reduction);
+            let time_reduction = (stats.attack_cooldown as f32 * percent as f32 / 100.0).round() as i32;
+            stats.attack_cooldown = stats.attack_cooldown.saturating_sub(time_reduction);
         }),
     },
     Ability {

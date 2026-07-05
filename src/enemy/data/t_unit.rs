@@ -30,7 +30,7 @@ pub struct Battle {
     pub knockbacks: i32,
     pub speed: i32,
     pub attack_1: i32,
-    pub time_between_attacks: i32,
+    pub attack_cooldown: i32,
     pub standing_range: i32,
     pub cash_drop: i32,
     pub hitbox_position: i32,
@@ -160,7 +160,7 @@ impl Battle {
             effective_foreswing = self.time_until_attack_2;
         }
 
-        let cooldown_frames = self.time_between_attacks.saturating_sub(1);
+        let cooldown_frames = self.attack_cooldown.saturating_sub(1);
 
         (effective_foreswing + cooldown_frames).max(frames)
     }
@@ -203,7 +203,7 @@ fn parse_line_data(cols: &[&str]) -> Battle {
         knockbacks: parse_cell(cols, 1, &mut max_read, 0),
         speed: parse_cell(cols, 2, &mut max_read, 0),
         attack_1: parse_cell(cols, 3, &mut max_read, 0),
-        time_between_attacks: parse_cell(cols, 4, &mut max_read, 0) * 2,
+        attack_cooldown: parse_cell(cols, 4, &mut max_read, 0) * 2,
         standing_range: parse_cell(cols, 5, &mut max_read, 0),
         cash_drop: parse_cell(cols, 6, &mut max_read, 0),
         hitbox_position: parse_cell(cols, 7, &mut max_read, 0),
