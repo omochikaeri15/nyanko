@@ -312,12 +312,15 @@ fn parse_line_data(cols: &[&str]) -> Battle {
         type_kaijin: parse_cell(cols, 110, &mut max_read, 0),
         drain_chance: parse_cell(cols, 111, &mut max_read, 0),
         drain_percent: parse_cell(cols, 112, &mut max_read, 0),
-        has_unknown_abilities: 0,
+        has_unknown_abilities: -1,
     };
 
     raw.has_unknown_abilities = if cols.iter()
         .skip(max_read + 1)
-        .any(|col| col.trim().parse::<i32>().unwrap_or(0) != 0)
+        .any(|col| {
+            let val = col.trim().parse::<i32>().unwrap_or(0);
+            val != 0 && val != -1
+        })
     {
         1
     } else {

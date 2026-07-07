@@ -280,11 +280,12 @@ impl Battle {
             explosion_spawn_anchor: get_int(114) / 4,
             explosion_spawn_span: get_int(115) / 4,
             explosion_immune: get_int(116),
-            has_unknown_abilities: 0,
+            has_unknown_abilities: -1,
         };
 
         for val in line_parts.iter().skip(max_read.get() + 1) {
-            if val.trim().parse::<i32>().unwrap_or(0) != 0 {
+            let parsed_val = val.trim().parse::<i32>().unwrap_or(0);
+            if parsed_val != 0 && parsed_val != -1 {
                 raw.has_unknown_abilities = 1;
                 break;
             }
