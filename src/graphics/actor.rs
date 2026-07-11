@@ -1,4 +1,4 @@
-use super::game::{construct, timeline, transform};
+use super::engine::{construct, timeline, transform};
 use super::utils::boundary::calculate_animation_bounds;
 use super::utils::periodicity::calculate_difference;
 
@@ -6,7 +6,7 @@ pub use super::data::maanim::Animation;
 pub use super::data::imgcut::{ImgRect, ImgVec2, SpriteCut, SpriteSheet};
 pub use super::data::mamodel::Model;
 
-/// A comprehensive container representing a fully parsed in-game entity.
+/// A comprehensive container representing a fully parsed in-engine entity.
 ///
 /// This structure aggregates the raw skeletal hierarchy (`Model`) and the mapped
 /// texture atlas (`SpriteSheet`) required to geometrically construct and render

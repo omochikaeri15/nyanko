@@ -11,7 +11,7 @@ mod example {
         let temp_apk_dirs = vec![PathBuf::from("/tmp/nyanko_apk_extract")];
 
         // 1. Standard Local Packs
-        // Base game files usually carry a weight of 0 to allow for easy overriding in memory.
+        // Base engine files usually carry a weight of 0 to allow for easy overriding in memory.
         let data_local = Path::new("DataLocal.pack");
         println!(
             "Weight for {}: {}",

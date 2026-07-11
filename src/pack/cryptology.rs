@@ -170,7 +170,7 @@ pub fn decrypt_list(data: &[u8]) -> Result<String, PackError> {
 /// Encrypts a string-based list manifest into raw bytes.
 ///
 /// The manifest is encoded using the standard "pack" ECB cipher configuration
-/// expected by the game client when parsing list files.
+/// expected by the engine client when parsing list files.
 ///
 /// # Arguments
 /// * `data` - A string slice representing the unencrypted manifest content.

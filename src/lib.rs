@@ -6,7 +6,7 @@
 #[cfg(feature = "graphics")] pub mod graphics;
 pub mod cat;
 pub mod enemy;
-// TODO: pub mod stage; [stage struct, stage data, CPU Skip/Treasure/Restrictions/Etc.]
+pub mod chapter;
 pub mod common;
 
 #[cfg(feature = "graphics")] pub use image;

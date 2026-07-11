@@ -4,7 +4,7 @@ use super::unit::{Battle, TalentGroup};
 
 /// Represents the mathematical or logical unit of measurement for an ability's attribute.
 ///
-/// Because the game data stores all values as flat integers (e.g., `50`), this enum provides
+/// Because the engine data stores all values as flat integers (e.g., `50`), this enum provides
 /// the necessary context to determine whether that integer represents a percentage, a
 /// frame count, a spatial distance, or a raw numerical value. This is critical for both
 /// accurate calculations and UI formatting.
@@ -21,7 +21,7 @@ pub enum AttrUnit {
 }
 
 /// A comprehensive enumeration acting as the unique domain identifier for every known
-/// trait, ability, immunity, and stat modifier in the game.
+/// trait, ability, immunity, and stat modifier in the engine.
 ///
 /// This serves as a strongly-typed key, avoiding the need to pass around string
 /// comparisons or raw, contextless integer IDs when checking a unit's capabilities.
@@ -42,16 +42,16 @@ pub enum Identity {
     HealthBuff, TbaDown, ImproveKnockbacks
 }
 
-/// The pure domain definition of a generalized game mechanic (Ability, Trait, or Talent).
+/// The pure domain definition of a generalized engine mechanic (Ability, Trait, or Talent).
 ///
-/// This structure bridges the gap between raw, static game data and dynamically evaluated
+/// This structure bridges the gap between raw, static engine data and dynamically evaluated
 /// combat mechanics. It dictates how an ability is identified, presented to the user,
 /// mathematically extracted from a stat block, and how it permanently mutates a unit's
 /// stats when unlocked via the talent system.
 pub struct Ability {
     /// The strongly-typed domain identifier for this ability.
     pub identity: Identity,
-    /// The raw internal integer ID used by the game's talent system (`0` if not applicable).
+    /// The raw internal integer ID used by the engine's talent system (`0` if not applicable).
     pub talent_id: u8,
     /// An optional reference to the sprite index in the `img015` icon atlas used for UI rendering.
     pub icon_id: Option<usize>,
@@ -78,7 +78,7 @@ fn get_dur_val(v1: i32, v2: i32) -> i32 {
 /// Locates and returns a static reference to an `Ability` definition based on its raw internal talent ID.
 ///
 /// # Arguments
-/// * `id` - The raw `u8` integer ID sourced from the game's talent definition files.
+/// * `id` - The raw `u8` integer ID sourced from the engine's talent definition files.
 ///
 /// # Returns
 /// An `Option` containing a static reference to the corresponding `Ability`, or `None` if the ID is unmapped (e.g., ID `0` or an unknown future talent).
@@ -87,7 +87,7 @@ pub fn get_talent(id: u8) -> Option<&'static Ability> {
 }
 
 /// The global, statically allocated registry containing the domain definitions for every known
-/// ability, trait, immunity, and stat modifier in the game.
+/// ability, trait, immunity, and stat modifier in the engine.
 pub static REGISTRY: &[Ability] = &[
     Ability {
         identity: Identity::SingleAttack,

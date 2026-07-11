@@ -1,4 +1,4 @@
-//! Core data aggregation module for in-game entities.
+//! Core data aggregation module for in-engine entities.
 //!
 //! This module acts as the primary data facade, re-exporting the specialized
 //! parsers, structures, and error types required to process a unit's mechanical
@@ -17,7 +17,7 @@ pub use super::data::unitlevel::{LevelCurve, LevelError};
 
 /// The comprehensive, fully-aggregated representation of a Cat unit.
 ///
-/// Because the game's native architecture scatters a single unit's definition across
+/// Because the engine's native architecture scatters a single unit's definition across
 /// multiple discrete localized and mechanical files, this structure serves as an
 /// aggregate root. It combines localized strings, statistical battle arrays,
 /// experience progression curves, and extracted animation data into a single,

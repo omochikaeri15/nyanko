@@ -98,8 +98,8 @@ fn parse_inner(bytes: &[u8]) -> Result<UnitExplanation, UnitExplanationError> {
 
 fn is_problematic_char(character: char) -> bool {
     let codepoint = character as u32;
-    if (0xE0100..=0xE01EF).contains(&codepoint) { return true; } // Variation Selectors
-    if (0xFE00..=0xFE0F).contains(&codepoint) { return true; }   // Variation Selectors
+    if (0xE0100..=0xE01EF).contains(&codepoint) { return true; }
+    if (0xFE00..=0xFE0F).contains(&codepoint) { return true; }
     false
 }
 

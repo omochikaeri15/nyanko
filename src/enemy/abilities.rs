@@ -10,7 +10,7 @@ use super::unit::Battle;
 
 /// Represents the mathematical or logical unit of measurement for an ability's attribute.
 ///
-/// Because the game data stores all values as flat integers (e.g., `50`), this enum provides
+/// Because the engine data stores all values as flat integers (e.g., `50`), this enum provides
 /// the necessary context to determine whether that integer represents a percentage, a
 /// frame count, a spatial distance, or a raw numerical value. This is critical for both
 /// accurate calculations and UI formatting.
@@ -46,7 +46,7 @@ pub enum Identity {
 
 /// The pure domain definition of an enemy combat mechanic (Ability, Trait, or Immunity).
 ///
-/// This structure bridges the gap between raw, static game data and dynamically evaluated
+/// This structure bridges the gap between raw, static engine data and dynamically evaluated
 /// combat mechanics. It dictates how an ability is identified, its mathematical schema,
 /// and how its raw attributes are dynamically extracted from the core `Battle` stat block.
 pub struct Ability {
@@ -81,7 +81,7 @@ pub fn get_ability(identity: Identity) -> Option<&'static Ability> {
 }
 
 /// The global, statically allocated registry containing the domain definitions for every known
-/// enemy ability, trait, immunity, and stat modifier in the game.
+/// enemy ability, trait, immunity, and stat modifier in the engine.
 pub static REGISTRY: &[Ability] = &[
     Ability {
         identity: Identity::SingleAttack,
