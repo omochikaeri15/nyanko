@@ -41,7 +41,6 @@ impl Region {
         }
     }
 
-    #[allow(dead_code)]
     pub fn from_str(input_string: &str) -> Option<Self> {
         match input_string.to_lowercase().as_str() {
             "ja" | "jp" | "battlecats" => Some(Region::Ja),

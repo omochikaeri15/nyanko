@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::common::utils::csv;
+use crate::common::tools::csv;
 
 /// Represents errors that can occur during the parsing of raw enemy battle data.
 #[derive(Debug, Clone, PartialEq, Eq)]

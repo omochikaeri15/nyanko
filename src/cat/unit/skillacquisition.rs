@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::utils::csv;
+use crate::common::tools::csv;
 
 #[derive(Debug)]
 pub enum SkillAcquisitionError {
