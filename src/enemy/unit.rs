@@ -4,9 +4,15 @@
 //! parsers, structures, and error types required to process an enemy's mechanical
 //! and visual data.
 
-pub use super::data::t_unit::{Battle, BattleError};
-pub use super::data::enemyname::{EnemyName, EnemyNameError};
-pub use super::data::enemypicturebook::{EnemyPictureBook, EnemyPictureBookError};
+mod enemyname;
+mod enemypicturebook;
+mod t_unit;
+
+use serde::{Deserialize, Serialize};
+
+pub use enemyname::{EnemyName, EnemyNameError};
+pub use enemypicturebook::{EnemyPictureBook, EnemyPictureBookError};
+pub use t_unit::{Battle, BattleError};
 
 /// The comprehensive, fully-aggregated representation of an Enemy unit.
 ///
@@ -18,7 +24,7 @@ pub use super::data::enemypicturebook::{EnemyPictureBook, EnemyPictureBookError}
 ///
 /// This struct is inherently designed to be serialized (typically to JSON) as the
 /// final output state of the data extraction pipeline.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Unit {
     /// The base mathematical identifier for the enemy, corresponding to its directory and file prefixes.
     pub id: u32,

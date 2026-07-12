@@ -1,14 +1,13 @@
+mod ciphers;
+mod verify;
+
 use std::error::Error;
 use std::fmt;
 
 use crate::common::utils::variant::Region;
+use ciphers::{decrypt_cbc, decrypt_ecb, encrypt_cbc, encrypt_ecb, get_md5_key};
 
-use super::utils::ciphers::{
-    decrypt_cbc, decrypt_ecb,
-    encrypt_cbc, encrypt_ecb,
-    get_md5_key};
-
-pub use super::utils::verify::check_integrity;
+pub use verify::check_integrity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {

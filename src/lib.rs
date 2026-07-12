@@ -11,3 +11,4 @@ pub mod common;
 
 #[cfg(feature = "graphics")] pub use image;
 pub use serde;
+pub use serde_json;

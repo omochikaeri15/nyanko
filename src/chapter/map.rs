@@ -1,13 +1,24 @@
+mod dropitem;
+mod ex_option;
+mod lockskipdata;
+mod map_name;
+mod map_option;
+mod redirect;
+mod scorebonusmap;
+mod specialrulesmap;
+mod specialrulesmapoption;
+
 use serde::{Deserialize, Serialize};
 
-pub use super::data::dropitem::{DropItem, DropItemEntry, DropItemError};
-pub use super::data::ex_option::{ExOption, ExOptionError};
-pub use super::data::lockskipdata::{LockSkipData, LockSkipDataEntry, LockSkipDataError};
-pub use super::data::map_name::{MapName, MapNameError};
-pub use super::data::map_option::{MapOption, MapOptionEntry, MapOptionError, ResetType};
-pub use super::data::scorebonusmap::{ScoreBonusMap, ScoreBonusMapEntry, ScoreBonusMapError, BonusType};
-pub use super::data::specialrulesmap::{SpecialRulesMap, SpecialRulesMapEntry, SpecialRulesMapError, RuleType};
-pub use super::data::specialrulesmapoption::{SpecialRulesMapOption, SpecialRulesMapOptionEntry, SpecialRulesMapOptionError};
+pub use dropitem::{DropItem, DropItemEntry, DropItemError};
+pub use ex_option::{ExOption, ExOptionError};
+pub use lockskipdata::{LockSkipData, LockSkipDataEntry, LockSkipDataError};
+pub use map_name::{MapName, MapNameError};
+pub use map_option::{MapOption, MapOptionEntry, MapOptionError, ResetType};
+pub use redirect::redirect_map_id;
+pub use scorebonusmap::{BonusType, ScoreBonusMap, ScoreBonusMapEntry, ScoreBonusMapError};
+pub use specialrulesmap::{RuleType, SpecialRulesMap, SpecialRulesMapEntry, SpecialRulesMapError};
+pub use specialrulesmapoption::{SpecialRulesMapOption, SpecialRulesMapOptionEntry, SpecialRulesMapOptionError};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Map {

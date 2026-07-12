@@ -1,6 +1,6 @@
-use crate::graphics::data::imgcut::SpriteSheet;
-use crate::graphics::data::maanim::Animation;
-use crate::graphics::data::mamodel::Model;
+use crate::graphics::rig::SpriteSheet;
+use crate::graphics::rig::Animation;
+use crate::graphics::rig::Model;
 use crate::graphics::engine::timeline;
 use crate::graphics::engine::transform::{self, Vector};
 

@@ -4,16 +4,26 @@
 //! parsers, structures, and error types required to process a unit's mechanical
 //! and visual data.
 
-use std::collections::BTreeMap;
+mod skillacquisition;
+mod skilldescriptions;
+mod skilllevel;
+mod unitbuy;
+mod unitevolve;
+mod unitexplanation;
+mod unitid;
+mod unitlevel;
 
-pub use super::data::skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
-pub use super::data::skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
-pub use super::data::skilllevel::{SkillLevelError, TalentCost};
-pub use super::data::unitbuy::{UnitBuy, UnitBuyError};
-pub use super::data::unitevolve::{UnitEvolve, UnitEvolveError};
-pub use super::data::unitexplanation::{UnitExplanation, UnitExplanationError};
-pub use super::data::unitid::{Battle, BattleError};
-pub use super::data::unitlevel::{LevelCurve, LevelError};
+use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
+
+pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
+pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
+pub use skilllevel::{SkillLevelError, TalentCost};
+pub use unitbuy::{UnitBuy, UnitBuyError};
+pub use unitevolve::{UnitEvolve, UnitEvolveError};
+pub use unitexplanation::{UnitExplanation, UnitExplanationError};
+pub use unitid::{Battle, BattleError};
+pub use unitlevel::{LevelCurve, LevelError};
 
 /// The comprehensive, fully-aggregated representation of a Cat unit.
 ///
@@ -25,7 +35,7 @@ pub use super::data::unitlevel::{LevelCurve, LevelError};
 ///
 /// This struct is inherently designed to be serialized (typically to JSON) as the
 /// final output state of the data extraction pipeline.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Unit {
     /// The base mathematical identifier for the unit, corresponding to its directory and file prefixes.
     pub id: u16,

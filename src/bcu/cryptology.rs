@@ -1,9 +1,10 @@
+mod ciphers;
+mod parser;
+
 use std::error;
 use std::fmt;
 
 use serde::Deserialize;
-
-use super::utils::{ciphers, parser};
 
 const HEAD_DATA: &[u8] = b"battlecatsultimate";
 

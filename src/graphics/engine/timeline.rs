@@ -1,5 +1,5 @@
-use crate::graphics::data::maanim::{Animation, AnimModification};
-use crate::graphics::data::mamodel::{Model, ModelPart};
+use crate::graphics::rig::{Animation, AnimModification};
+use crate::graphics::rig::{Model, ModelPart};
 
 #[derive(Debug)]
 pub enum TimelineError {

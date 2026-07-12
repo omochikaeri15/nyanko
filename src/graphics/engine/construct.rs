@@ -1,5 +1,5 @@
-use crate::graphics::actor::FrameData;
-use crate::graphics::data::imgcut::SpriteSheet;
+use crate::graphics::engine::FrameData;
+use crate::graphics::rig::SpriteSheet;
 
 use super::transform::WorldTransform;
 

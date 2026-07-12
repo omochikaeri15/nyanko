@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::chapter::domain::redirect::redirect_map_id;
+use crate::chapter::map::redirect_map_id;
 use crate::common::utils::csv;
 
 #[derive(Debug)]

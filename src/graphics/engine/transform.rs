@@ -1,4 +1,4 @@
-use crate::graphics::data::mamodel::{Model, ModelPart};
+use crate::graphics::rig::{Model, ModelPart};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vector {

@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::utils::csv;
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
-pub enum SCatCpuSettingError {
+pub enum ScatCpuSettingError {
     EmptyFile,
 }
 
-impl fmt::Display for SCatCpuSettingError {
+impl fmt::Display for ScatCpuSettingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyFile => write!(
@@ -21,27 +20,26 @@ impl fmt::Display for SCatCpuSettingError {
     }
 }
 
-impl std::error::Error for SCatCpuSettingError {}
+impl std::error::Error for ScatCpuSettingError {}
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SCatCpuSetting {
+pub struct ScatCpuSetting {
     pub unknown_1: u32,
     pub super_cpu_daily_limit: u32,
     pub super_cpu_consume_amount: u32,
 }
 
-impl SCatCpuSetting {
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SCatCpuSettingError> {
+impl ScatCpuSetting {
+    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, ScatCpuSettingError> {
         parse_inner(bytes.as_ref())
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<SCatCpuSetting, SCatCpuSettingError> {
+fn parse_inner(bytes: &[u8]) -> Result<ScatCpuSetting, ScatCpuSettingError> {
     let file_content = csv::scrub(bytes);
     let separator_char = csv::detect_separator(&file_content);
 
-    let mut setting = SCatCpuSetting::default();
+    let mut setting = ScatCpuSetting::default();
     let mut has_content = false;
 
     for file_line in file_content.lines() {
@@ -81,7 +79,7 @@ fn parse_inner(bytes: &[u8]) -> Result<SCatCpuSetting, SCatCpuSettingError> {
     }
 
     if !has_content {
-        return Err(SCatCpuSettingError::EmptyFile);
+        return Err(ScatCpuSettingError::EmptyFile);
     }
 
     Ok(setting)
