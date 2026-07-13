@@ -10,6 +10,8 @@ mod specialrulesmapoption;
 
 use serde::{Deserialize, Serialize};
 
+use crate::chapter::Category;
+
 pub use dropitem::{DropItem, DropItemEntry, DropItemError};
 pub use ex_option::{ExOption, ExOptionError};
 pub use lockskipdata::{LockSkipData, LockSkipDataEntry, LockSkipDataError};
@@ -22,12 +24,10 @@ pub use specialrulesmapoption::{SpecialRulesMapOption, SpecialRulesMapOptionEntr
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Map {
-    pub id: String,
     pub name: String,
-    pub category: String,
-    pub category_name: String,
+    pub category: Category,
     pub map_id: u32,
-    pub stages: Vec<String>,
+    pub stages: Vec<u32>,
     pub max_crowns: u8,
     pub has_abyss: bool,
     pub crown_1_mag: Option<u32>,
@@ -43,5 +43,5 @@ pub struct Map {
     pub score_bonuses: Option<ScoreBonusMapEntry>,
     pub special_rules: Option<SpecialRulesMapEntry>,
     pub invalid_combos: Vec<u32>,
-    pub drop_items: Option<DropItem>,
+    pub drop_items: Option<DropItemEntry>,
 }

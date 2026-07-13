@@ -34,18 +34,31 @@ pub struct StageName {
 }
 
 impl StageName {
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, StageNameError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(file_bytes: B) -> Result<Self, StageNameError> {
+        parse_inner(file_bytes.as_ref())
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<StageName, StageNameError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+fn check_story_parsing(parsed_lines: &[(usize, Vec<String>)]) -> bool {
+    let last_entry = match parsed_lines.last() {
+        Some((_, names)) => names,
+        None => return false,
+    };
 
-    let mut entries = HashMap::new();
-    let mut has_content = false;
-    
+    let first_name = match last_entry.first() {
+        Some(name) => name.as_str(),
+        None => return false,
+    };
+
+    first_name == "dammy" || first_name == "<TBD>"
+}
+
+fn parse_inner(file_bytes: &[u8]) -> Result<StageName, StageNameError> {
+    let file_content = csv::scrub(file_bytes);
+    let csv_separator = csv::detect_separator(&file_content);
+
+    let mut parsed_lines: Vec<(usize, Vec<String>)> = Vec::new();
+
     for (line_index, file_line) in file_content.lines().enumerate() {
         let mut clean_line = file_line;
         if let Some((before_comment, _)) = file_line.split_once("//") {
@@ -57,22 +70,82 @@ fn parse_inner(bytes: &[u8]) -> Result<StageName, StageNameError> {
             continue;
         }
 
-        has_content = true;
-
-        let names: Vec<String> = trimmed_line
-            .split(separator_char)
+        let stage_names: Vec<String> = trimmed_line
+            .split(csv_separator)
             .map(|part| part.trim().to_string())
             .collect();
 
-        entries.insert(
-            line_index as u32,
-            StageNameEntry { names },
-        );
+        if stage_names.is_empty() {
+            continue;
+        }
+
+        parsed_lines.push((line_index, stage_names));
     }
 
-    if !has_content {
+    if parsed_lines.is_empty() {
         return Err(StageNameError::EmptyFile);
     }
 
-    Ok(StageName { entries })
+    let is_story_mode = check_story_parsing(&parsed_lines);
+    let mut stage_entries = HashMap::new();
+
+    if !is_story_mode {
+        for (original_index, names) in parsed_lines {
+            stage_entries.insert(original_index as u32, StageNameEntry { names });
+        }
+        return Ok(StageName {
+            entries: stage_entries,
+        });
+    }
+
+    let valid_story_lines: Vec<Vec<String>> = parsed_lines
+        .into_iter()
+        .map(|(_, names)| names)
+        .filter(|names| {
+            let first_name = match names.first() {
+                Some(name) => name.as_str(),
+                None => "",
+            };
+            first_name != "dammy" && first_name != "<TBD>"
+        })
+        .collect();
+
+    let valid_lines_count = valid_story_lines.len();
+
+    if valid_lines_count < 2 {
+        for (idx, names) in valid_story_lines.into_iter().enumerate() {
+            stage_entries.insert(idx as u32, StageNameEntry { names });
+        }
+        return Ok(StageName {
+            entries: stage_entries,
+        });
+    }
+
+    let split_index = valid_lines_count - 2;
+    let (backwards_part, forwards_part) = valid_story_lines.split_at(split_index);
+    let mut assigned_stage_id = 0u32;
+
+    for names in backwards_part.iter().rev() {
+        stage_entries.insert(
+            assigned_stage_id,
+            StageNameEntry {
+                names: names.clone(),
+            },
+        );
+        assigned_stage_id += 1;
+    }
+
+    for names in forwards_part.iter() {
+        stage_entries.insert(
+            assigned_stage_id,
+            StageNameEntry {
+                names: names.clone(),
+            },
+        );
+        assigned_stage_id += 1;
+    }
+
+    Ok(StageName {
+        entries: stage_entries,
+    })
 }

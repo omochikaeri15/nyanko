@@ -14,6 +14,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::chapter::Category;
+
 pub use battleground::{Battleground, BattlegroundEntry, BattlegroundError, BossType, EnemyAmount};
 pub use certification_preset::{AbilityType, CannonType, CertificationPreset, CertificationPresetError, EvolutionForm, PresetAbility, PresetChara, PresetTreasure, TreasureType};
 pub use charagroup::{CharaGroup, CharaGroupEntry, CharaGroupError, CharaGroupType};
@@ -28,10 +30,8 @@ pub use xp::get_hardcoded_xp;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Stage {
-    pub id: String,
     pub name: String,
-    pub category: String,
-    pub category_name: String,
+    pub category: Category,
     pub map_id: u32,
     pub stage_id: u32,
     pub base_id: i32,
@@ -61,6 +61,6 @@ pub struct Stage {
     pub allowed_rows: u8,
     pub min_cost: u32,
     pub max_cost: u32,
-    pub charagroup: Option<CharaGroup>,
+    pub charagroup: Option<CharaGroupEntry>,
     pub fixed_lineups: HashMap<u8, CertificationPreset>,
 }
