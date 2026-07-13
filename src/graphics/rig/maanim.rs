@@ -132,8 +132,12 @@ impl Animation {
         if !found_looping_part {
             return Some(self.max_frame);
         }
+        
+        if (overall_lcm as i32) < self.max_frame {
+            return None;
+        }
 
-        Some(std::cmp::max(overall_lcm as i32, self.max_frame))
+        Some(overall_lcm as i32)
     }
 
     #[inline(always)]
