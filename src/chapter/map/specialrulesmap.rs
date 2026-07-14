@@ -3,6 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::common::tools::file::scrub;
+
 #[derive(Debug)]
 pub enum SpecialRulesMapError {
     InvalidJson,
@@ -50,12 +52,13 @@ pub struct SpecialRulesMap {
 
 impl SpecialRulesMap {
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SpecialRulesMapError> {
-        parse_inner(bytes.as_ref())
+        let clean_json = scrub(bytes.as_ref());
+        parse_inner(&clean_json)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<SpecialRulesMap, SpecialRulesMapError> {
-    let json_value: serde_json::Value = serde_json::from_slice(bytes)
+fn parse_inner(json_str: &str) -> Result<SpecialRulesMap, SpecialRulesMapError> {
+    let json_value: serde_json::Value = serde_json::from_str(json_str)
         .map_err(|_| SpecialRulesMapError::InvalidJson)?;
 
     let mut entries = HashMap::new();

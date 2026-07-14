@@ -3,8 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::chapter::map::redirect_map_id;
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum StageOptionError {
@@ -49,8 +48,8 @@ impl StageOption {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     let mut entries: HashMap<u32, Vec<StageOptionEntry>> = HashMap::new();
     let mut has_content = false;
@@ -76,9 +75,7 @@ fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
         }
 
         let Some(raw_map_id_str) = parts.first() else { continue; };
-        let Ok(raw_map_id) = raw_map_id_str.trim().parse::<u32>() else { continue; };
-
-        let map_id = redirect_map_id(raw_map_id);
+        let Ok(map_id) = raw_map_id_str.trim().parse::<u32>() else { continue; };
 
         let mut target_crowns: i8 = -1;
         if let Some(val_str) = parts.get(1) {

@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum StageNameError {
@@ -49,8 +49,8 @@ fn is_dummy_string(val: &str) -> bool {
 }
 
 fn parse_inner(file_bytes: &[u8]) -> Result<StageName, StageNameError> {
-    let file_content = csv::scrub(file_bytes);
-    let csv_separator = csv::detect_separator(&file_content);
+    let file_content = file::scrub(file_bytes);
+    let csv_separator = file::detect_separator(&file_content);
 
     let mut parsed_lines: Vec<(usize, Vec<String>)> = Vec::new();
 

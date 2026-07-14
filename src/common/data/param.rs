@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// Represents an error encountered during the parameter deserialization phase.
 #[derive(Debug)]
@@ -124,7 +124,7 @@ impl Param {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<Param, ParamError> {
-    let file_content = csv::scrub(bytes);
+    let file_content = file::scrub(bytes);
 
     let mut map = HashMap::with_capacity(150);
     let mut raw_ordered_values = Vec::with_capacity(150);

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum UnitExplanationError {
@@ -46,8 +46,8 @@ impl UnitExplanation {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<UnitExplanation, UnitExplanationError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     let mut names: [Option<String>; 4] = [const { None }; 4];
     let mut descriptions: [Option<Vec<String>>; 4] = [const { None }; 4];

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// Represents an error encountered during the localization dictionary build phase.
 #[derive(Debug)]
@@ -52,7 +52,7 @@ impl Localizable {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<Localizable, LocalizableError> {
-    let content = csv::scrub(bytes);
+    let content = file::scrub(bytes);
     let estimated_entries = bytes.len() / 50;
     let mut map = HashMap::with_capacity(estimated_entries);
 

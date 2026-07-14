@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum MapOptionError {
@@ -78,20 +78,14 @@ impl MapOption {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     let mut lines_iterator = file_content.lines();
 
-    let Some(header_line) = lines_iterator.next() else {
+    if lines_iterator.next().is_none() {
         return Err(MapOptionError::MissingHeaders);
-    };
-
-    let headers_map: HashMap<&str, usize> = header_line
-        .split(separator_char)
-        .enumerate()
-        .map(|(index, header_string)| (header_string.trim(), index))
-        .collect();
+    }
 
     let mut entries = HashMap::new();
     let mut has_content = false;
@@ -112,79 +106,49 @@ fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
 
         has_content = true;
 
-        let parts: Vec<&str> = trimmed_data.split(separator_char).collect();
+        let mut parts: Vec<&str> = trimmed_data.split(separator_char).collect();
 
-        let get_value = |header_name: &str, fallback_index: usize| -> Option<&str> {
-            if let Some(&column_index) = headers_map.get(header_name) {
-                if let Some(value) = parts.get(column_index) {
-                    return Some(value.trim());
-                }
+        let expected_columns: usize = 19;
+        let injection_points = [(2, "0")];
+
+        let missing_cols = expected_columns.saturating_sub(parts.len());
+        for i in 0..missing_cols.min(injection_points.len()) {
+            let (inject_idx, default_val) = injection_points[i];
+            if inject_idx <= parts.len() {
+                parts.insert(inject_idx, default_val);
             }
-            if let Some(value) = parts.get(fallback_index) {
-                return Some(value.trim());
-            }
-            None
+        }
+
+        let get_value = |index: usize| -> Option<&str> {
+            parts.get(index).map(|s| s.trim())
         };
 
-        // Determine offset for shifted columns
-        let mut column_offset = 0;
-        if let Some(column_2_value) = parts.get(2) {
-            let trimmed_col2 = column_2_value.trim();
-            if trimmed_col2.is_empty() || trimmed_col2.parse::<u32>().is_err() {
-                column_offset = 1;
-            }
-        } else {
-            column_offset = 1;
-        }
-
-        let Some(map_id_string) = get_value("stageID", 0) else { continue; };
+        let Some(map_id_string) = get_value(0) else { continue; };
         let Ok(map_id) = map_id_string.parse::<u32>() else { continue; };
 
-        let mut max_crowns = 1;
-        if let Some(value_str) = get_value("星解放", 1) {
-            if let Ok(parsed_value) = value_str.parse::<u8>() {
-                max_crowns = parsed_value;
-            }
-        }
+        let max_crowns = get_value(1)
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(1);
 
-        let mut has_abyss = false;
-        if let Some(value_str) = get_value("裏星解放", 2) {
-            if let Ok(parsed_value) = value_str.parse::<u8>() {
-                if parsed_value == 1 {
-                    has_abyss = true;
-                }
-            }
-        }
+        let has_abyss = get_value(2)
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(0) == 1;
 
-        let mut reset_type_val = 0;
-        if let Some(value_str) = get_value("報酬リセットType", 8 + column_offset) {
-            if let Ok(parsed_value) = value_str.parse::<u8>() {
-                reset_type_val = parsed_value;
-            }
-        }
+        let reset_type_val = get_value(8)
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(0);
 
-        let mut max_clears = 0;
-        if let Some(value_str) = get_value("1度きり表示", 9 + column_offset) {
-            if let Ok(parsed_value) = value_str.parse::<u32>() {
-                max_clears = parsed_value;
-            }
-        }
+        let max_clears = get_value(9)
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
 
-        let mut cooldown_minutes = 0;
-        if let Some(value_str) = get_value("インターバル", 11 + column_offset) {
-            if let Ok(parsed_value) = value_str.parse::<u32>() {
-                cooldown_minutes = parsed_value;
-            }
-        }
+        let cooldown_minutes = get_value(11)
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
 
-        let mut hidden_upon_clear = false;
-        if let Some(value_str) = get_value("クリア後非表示", 14 + column_offset) {
-            if let Ok(parsed_value) = value_str.parse::<u8>() {
-                if parsed_value == 1 {
-                    hidden_upon_clear = true;
-                }
-            }
-        }
+        let hidden_upon_clear = get_value(14)
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(0) == 1;
 
         entries.insert(
             map_id,
@@ -192,10 +156,10 @@ fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
                 map_id,
                 max_crowns,
                 has_abyss,
-                crown_1_mag: get_value("星1倍率", 3 + column_offset).and_then(|val| val.parse::<u32>().ok()),
-                crown_2_mag: get_value("星2倍率", 4 + column_offset).and_then(|val| val.parse::<u32>().ok()),
-                crown_3_mag: get_value("星3倍率", 5 + column_offset).and_then(|val| val.parse::<u32>().ok()),
-                crown_4_mag: get_value("星4倍率", 6 + column_offset).and_then(|val| val.parse::<u32>().ok()),
+                crown_1_mag: get_value(3).and_then(|val| val.parse::<u32>().ok()),
+                crown_2_mag: get_value(4).and_then(|val| val.parse::<u32>().ok()),
+                crown_3_mag: get_value(5).and_then(|val| val.parse::<u32>().ok()),
+                crown_4_mag: get_value(6).and_then(|val| val.parse::<u32>().ok()),
                 reset_type: ResetType::from(reset_type_val),
                 max_clears,
                 cooldown_minutes,

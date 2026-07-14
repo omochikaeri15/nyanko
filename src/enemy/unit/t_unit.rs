@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// Represents errors that can occur during the parsing of raw enemy battle data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -331,8 +331,8 @@ fn parse_line_data(cols: &[&str]) -> Battle {
 }
 
 fn parse_all_inner(bytes: &[u8]) -> Result<Vec<Battle>, BattleError> {
-    let content = csv::scrub(bytes);
-    let separator = csv::detect_separator(&content);
+    let content = file::scrub(bytes);
+    let separator = file::detect_separator(&content);
     let mut enemies = Vec::new();
 
     for line in content.lines().skip(2) {
@@ -351,8 +351,8 @@ fn parse_all_inner(bytes: &[u8]) -> Result<Vec<Battle>, BattleError> {
 }
 
 fn parse_inner(bytes: &[u8], id: usize) -> Result<Option<Battle>, BattleError> {
-    let content = csv::scrub(bytes);
-    let separator = csv::detect_separator(&content);
+    let content = file::scrub(bytes);
+    let separator = file::detect_separator(&content);
 
     let Some(target_line) = content.lines().skip(2).nth(id) else {
         return Ok(None);

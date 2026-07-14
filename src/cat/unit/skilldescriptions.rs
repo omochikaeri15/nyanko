@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum SkillDescriptionsError {
@@ -35,8 +35,8 @@ impl SkillDescriptions {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<SkillDescriptions, SkillDescriptionsError> {
-    let file_content = csv::scrub(bytes);
-    let separator = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator = file::detect_separator(&file_content);
 
     let mut texts = Vec::new();
 

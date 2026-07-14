@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use image::{self, RgbaImage};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// A simple two-dimensional vector representing spatial coordinates or dimensions in floating-point precision.
 #[derive(Clone, Copy, Debug, Default)]
@@ -87,8 +87,8 @@ impl SpriteSheet {
             }
         }
 
-        let content = csv::scrub(imgcut);
-        let delimiter = csv::detect_separator(&content);
+        let content = file::scrub(imgcut);
+        let delimiter = file::detect_separator(&content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
 
         let mut sprite_count = 0;

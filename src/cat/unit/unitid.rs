@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum BattleError {
@@ -300,8 +300,8 @@ impl Battle {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<Vec<Battle>, BattleError> {
-    let file_content = csv::scrub(bytes);
-    let delimiter = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let delimiter = file::detect_separator(&file_content);
 
     let mut entries = Vec::new();
 

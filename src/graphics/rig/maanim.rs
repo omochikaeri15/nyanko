@@ -1,4 +1,4 @@
-use crate::common::tools::csv;
+use crate::common::tools::file;
 use crate::graphics::tools::math;
 
 #[derive(Clone, Debug)]
@@ -32,8 +32,8 @@ impl Animation {
     }
 
     fn parse_inner(bytes: &[u8]) -> Option<Self> {
-        let content = csv::scrub(bytes);
-        let delimiter = csv::detect_separator(&content);
+        let content = file::scrub(bytes);
+        let delimiter = file::detect_separator(&content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
         if lines.is_empty() { return None; }
 
@@ -146,8 +146,8 @@ impl Animation {
     }
 
     fn scan_duration_inner(bytes: &[u8]) -> i32 {
-        let content = csv::scrub(bytes);
-        let delimiter = csv::detect_separator(&content);
+        let content = file::scrub(bytes);
+        let delimiter = file::detect_separator(&content);
 
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
         if lines.is_empty() { return 0; }

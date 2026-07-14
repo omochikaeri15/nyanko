@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum LevelError {
@@ -73,8 +73,8 @@ impl LevelCurve {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<Vec<LevelCurve>, LevelError> {
-    let file_content = csv::scrub(bytes);
-    let delimiter = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let delimiter = file::detect_separator(&file_content);
 
     let mut curves_list = Vec::new();
 

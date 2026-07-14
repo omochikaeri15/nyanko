@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum MapStageDataError {
@@ -69,8 +69,8 @@ impl MapStageData {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     // The first two lines of map stage data files are always headers/metadata.
     let lines_iterator = file_content.lines().skip(2);

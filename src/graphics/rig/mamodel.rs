@@ -1,4 +1,4 @@
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// Represents the baseline geometric and hierarchical state of a singular skeletal component.
 ///
@@ -107,8 +107,8 @@ impl Model {
     }
 
     fn parse_inner(bytes: &[u8]) -> Option<Self> {
-        let content = csv::scrub(bytes);
-        let delimiter = csv::detect_separator(&content);
+        let content = file::scrub(bytes);
+        let delimiter = file::detect_separator(&content);
 
         let lines: Vec<&str> = content.lines().filter(|line_ref| !line_ref.trim().is_empty()).collect();
 

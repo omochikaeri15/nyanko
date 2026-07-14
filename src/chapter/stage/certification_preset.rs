@@ -4,6 +4,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::common::tools::file::scrub;
+
 #[derive(Debug)]
 pub enum CertificationPresetError {
     InvalidJson,
@@ -170,12 +172,13 @@ pub struct CertificationPreset {
 
 impl CertificationPreset {
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, CertificationPresetError> {
-        parse_inner(bytes.as_ref())
+        let clean_json = scrub(bytes.as_ref());
+        parse_inner(&clean_json)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<CertificationPreset, CertificationPresetError> {
-    let Ok(json_root) = serde_json::from_slice::<Value>(bytes) else {
+fn parse_inner(json_str: &str) -> Result<CertificationPreset, CertificationPresetError> {
+    let Ok(json_root) = serde_json::from_str::<Value>(json_str) else {
         return Err(CertificationPresetError::InvalidJson);
     };
 

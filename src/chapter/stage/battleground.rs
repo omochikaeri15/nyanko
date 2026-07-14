@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum BattlegroundError {
@@ -97,8 +97,8 @@ impl Battleground {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<Battleground, BattlegroundError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     let mut clean_lines_iterator = file_content.lines().filter_map(|line| {
         let clean = line.split_once("//").map(|(before, _)| before).unwrap_or(line).trim();

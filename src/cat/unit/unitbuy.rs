@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum UnitBuyError {
@@ -149,8 +149,8 @@ impl UnitBuy {
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, UnitBuy>, UnitBuyError> {
-    let file_content = csv::scrub(bytes);
-    let delimiter = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let delimiter = file::detect_separator(&file_content);
 
     let mut map = HashMap::new();
 

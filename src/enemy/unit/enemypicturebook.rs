@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 /// Represents errors that can occur during the parsing of enemy picture book descriptions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,8 +71,8 @@ fn parse_line_data(line: &str, separator: char) -> EnemyPictureBook {
 }
 
 fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookError> {
-    let content = csv::scrub(bytes);
-    let separator = csv::detect_separator(&content);
+    let content = file::scrub(bytes);
+    let separator = file::detect_separator(&content);
     let mut descriptions = Vec::new();
 
     for line in content.lines() {
@@ -87,8 +87,8 @@ fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBo
 }
 
 fn parse_inner(bytes: &[u8], id: usize) -> Result<Option<EnemyPictureBook>, EnemyPictureBookError> {
-    let content = csv::scrub(bytes);
-    let separator = csv::detect_separator(&content);
+    let content = file::scrub(bytes);
+    let separator = file::detect_separator(&content);
 
     let Some(target_line) = content.lines().nth(id) else {
         return Ok(None);

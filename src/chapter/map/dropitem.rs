@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::csv;
+use crate::common::tools::file;
 
 #[derive(Debug)]
 pub enum DropItemError {
@@ -76,8 +76,8 @@ fn extract_u32_array_optional<const SIZE: usize>(parts: &[&str], start_index: us
 }
 
 fn parse_inner(bytes: &[u8]) -> Result<DropItem, DropItemError> {
-    let file_content = csv::scrub(bytes);
-    let separator_char = csv::detect_separator(&file_content);
+    let file_content = file::scrub(bytes);
+    let separator_char = file::detect_separator(&file_content);
 
     let mut map_drops = HashMap::new();
     let mut has_content = false;
