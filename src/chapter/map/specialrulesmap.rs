@@ -11,13 +11,8 @@ pub enum SpecialRulesMapError {
 }
 
 impl fmt::Display for SpecialRulesMapError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidJson => write!(
-                formatter,
-                "The provided byte slice could not be parsed as valid JSON."
-            ),
-        }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "The provided byte slice could not be parsed as valid JSON.")
     }
 }
 
@@ -43,6 +38,7 @@ pub struct SpecialRulesMapEntry {
     pub contents_type: u8,
     pub rules: Vec<RuleType>,
     pub name_label: String,
+    pub explanation_label: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,72 +48,63 @@ pub struct SpecialRulesMap {
 
 impl SpecialRulesMap {
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SpecialRulesMapError> {
-        let clean_json = scrub(bytes.as_ref());
-        parse_inner(&clean_json)
+        let clean = scrub(bytes.as_ref());
+        parse_inner(&clean)
     }
 }
 
 fn parse_inner(json_str: &str) -> Result<SpecialRulesMap, SpecialRulesMapError> {
-    let json_value: serde_json::Value = serde_json::from_str(json_str)
+    let val: serde_json::Value = serde_json::from_str(json_str)
         .map_err(|_| SpecialRulesMapError::InvalidJson)?;
 
     let mut entries = HashMap::new();
 
-    if let Some(map_id_object) = json_value.get("MapID").and_then(|v| v.as_object()) {
-        for (map_id_str, map_data) in map_id_object {
-            let Ok(map_id) = map_id_str.parse::<u32>() else { continue; };
+    let Some(map_obj) = val.get("MapID").and_then(|v| v.as_object()) else {
+        return Ok(SpecialRulesMap { entries });
+    };
 
-            let contents_type = map_data
-                .get("ContentsType")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u8;
+    for (id_str, data) in map_obj {
+        let Ok(id) = id_str.parse::<u32>() else { continue; };
 
-            let name_label = map_data
-                .get("RuleNameLabel")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+        let contents_type = data.get("ContentsType").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+        let name_label = data.get("RuleNameLabel").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let explanation_label = data.get("RuleExplanationLabel").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
-            let mut rules = Vec::new();
-            if let Some(rule_type_object) = map_data.get("RuleType").and_then(|v| v.as_object()) {
-                for (rule_id_str, rule_data) in rule_type_object {
-                    let Ok(rule_id) = rule_id_str.parse::<u8>() else { continue; };
+        let mut rules = Vec::new();
+        if let Some(rule_obj) = data.get("RuleType").and_then(|v| v.as_object()) {
+            for (r_id_str, r_data) in rule_obj {
+                let Ok(r_id) = r_id_str.parse::<u8>() else { continue; };
 
-                    let rule_values: Vec<u32> = rule_data
-                        .get("Parameters")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect()
-                        })
-                        .unwrap_or_default();
+                let params: Vec<u32> = r_data
+                    .get("Parameters")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|n| n as u32)).collect())
+                    .unwrap_or_default();
 
-                    let rule_enum = match rule_id {
-                        0 => RuleType::TrustFund(rule_values),
-                        1 => RuleType::CooldownEquality(rule_values),
-                        3 => RuleType::RarityLimit(rule_values),
-                        4 => RuleType::CheapLabor(rule_values),
-                        5 => RuleType::CatCost(rule_values),
-                        6 => RuleType::CatProduction(rule_values),
-                        7 => RuleType::TotalDeployLimit(rule_values),
-                        8 => RuleType::MoreThanOne(rule_values),
-                        9 => RuleType::MegaCatCannon(rule_values),
-                        10 => RuleType::UniformMotion(rule_values),
-                        _ => RuleType::Unknown(rule_id, rule_values),
-                    };
+                let rule = match r_id {
+                    0 => RuleType::TrustFund(params),
+                    1 => RuleType::CooldownEquality(params),
+                    3 => RuleType::RarityLimit(params),
+                    4 => RuleType::CheapLabor(params),
+                    5 => RuleType::CatCost(params),
+                    6 => RuleType::CatProduction(params),
+                    7 => RuleType::TotalDeployLimit(params),
+                    8 => RuleType::MoreThanOne(params),
+                    9 => RuleType::MegaCatCannon(params),
+                    10 => RuleType::UniformMotion(params),
+                    _ => RuleType::Unknown(r_id, params),
+                };
 
-                    rules.push(rule_enum);
-                }
+                rules.push(rule);
             }
-
-            entries.insert(
-                map_id,
-                SpecialRulesMapEntry {
-                    contents_type,
-                    rules,
-                    name_label,
-                },
-            );
         }
+
+        entries.insert(id, SpecialRulesMapEntry {
+            contents_type,
+            rules,
+            name_label,
+            explanation_label,
+        });
     }
 
     Ok(SpecialRulesMap { entries })
