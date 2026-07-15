@@ -8,65 +8,47 @@ use crate::common::tools::file;
 /// A simple two-dimensional vector representing spatial coordinates or dimensions in floating-point precision.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ImgVec2 {
-    /// The position or magnitude along the X-axis.
     pub x: f32,
-    /// The position or magnitude along the Y-axis.
     pub y: f32
 }
 
 /// A spatial bounding box defined by two points.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ImgRect {
-    /// The minimum (top-left) bounds of the rectangle.
     pub min: ImgVec2,
-    /// The maximum (bottom-right) bounds of the rectangle.
     pub max: ImgVec2
 }
 
 /// Represents a discrete sub-region within a master texture atlas.
-///
-/// This structure details the specific spatial mapping required to extract a single
-/// graphical element from a larger contiguous image buffer.
 #[derive(Clone, Debug)]
 pub struct SpriteCut {
-    /// The normalized boundary coordinates mapped to the master atlas.
     pub uv_coordinates: ImgRect,
-    /// The original pixel dimensions of the isolated sprite cut.
     pub original_size: ImgVec2,
-    /// An optional internal identifier or name associated with the sprite component.
     pub name: String,
 }
 
 /// The comprehensive parsed representation of a graphical texture atlas and its spatial mappings.
-///
-/// This structure contains the raw, memory-mapped RGBA byte buffers required for external
-/// hardware-accelerated texture allocation, alongside the dictionary defining how discrete
-/// sprites are mathematically extracted from the atlas.
 #[derive(Clone, Default)]
 pub struct SpriteSheet {
-    /// The decoded and alpha-premultiplied raw pixel data of the atlas.
     pub image_data: Option<Arc<RgbaImage>>,
-    /// A localized dictionary mapping absolute sprite ID integers to their respective UV coordinate bounds.
     pub cuts_map: HashMap<usize, SpriteCut>,
 }
 
 impl SpriteSheet {
-    /// Parses raw image bytes and coordinate CSV bytes into a fully initialized `SpriteSheet`.
-    ///
-    ///
-    /// # Arguments
-    /// * `png` - The raw byte stream of the target image file.
-    /// * `imgcut` - The raw byte stream of the associated CSV mapping file.
-    ///
-    /// # Returns
-    /// Returns `Some(SpriteSheet)` upon successful parsing and allocation, or `None` if the byte streams are invalid.
     #[inline(always)]
     pub fn parse(png: impl AsRef<[u8]>, imgcut: impl AsRef<[u8]>) -> Option<Self> {
         Self::parse_inner(png.as_ref(), imgcut.as_ref())
     }
 
     fn parse_inner(png: &[u8], imgcut: &[u8]) -> Option<Self> {
-        let mut image = image::load_from_memory(png).ok()?.to_rgba8();
+        let mut image_opt = image::load_from_memory(png).map(|img| img.to_rgba8()).ok();
+
+        if image_opt.is_none() && png.len() > 33 && &png[0..8] == &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+            image_opt = Self::repair_inner(png);
+        }
+
+        let mut image = image_opt?;
+
         let image_width = image.width() as f32;
         let image_height = image.height() as f32;
 
@@ -103,7 +85,7 @@ impl SpriteSheet {
 
             let Ok(count_val) = line.trim().parse::<usize>() else { continue; };
 
-            if count_val > 0 && count_val < 5000 {
+            if count_val > 0 && count_val < 10000 {
                 sprite_count = count_val;
                 data_start_index = index + 1;
                 found_header = true;
@@ -143,5 +125,119 @@ impl SpriteSheet {
         }
 
         Some(Self { image_data: Some(Arc::new(image)), cuts_map: parsed_cuts })
+    }
+
+    /// Salvages corrupted or truncated PNG streams.
+    #[inline(always)]
+    pub fn repair(png: impl AsRef<[u8]>) -> Option<RgbaImage> {
+        Self::repair_inner(png.as_ref())
+    }
+
+    fn repair_inner(png: &[u8]) -> Option<RgbaImage> {
+
+        fn calculate_crc32(chunk_type: &[u8], chunk_data: &[u8]) -> u32 {
+            let mut crc_value = 0xFFFFFFFFu32;
+            for &byte in chunk_type.iter().chain(chunk_data.iter()) {
+                crc_value ^= byte as u32;
+                for _ in 0..8 {
+                    crc_value = if (crc_value & 1) != 0 {
+                        (crc_value >> 1) ^ 0xEDB88320
+                    } else {
+                        crc_value >> 1
+                    };
+                }
+            }
+            crc_value ^ 0xFFFFFFFFu32
+        }
+
+        fn sanitize_png_chunks(bytes: &[u8]) -> Vec<u8> {
+            let mut fixed = Vec::with_capacity(bytes.len() + 12);
+            fixed.extend_from_slice(&bytes[0..8]);
+
+            let mut read_offset = 8;
+            let mut found_iend = false;
+
+            while read_offset + 8 <= bytes.len() {
+                let len_bytes = [bytes[read_offset], bytes[read_offset+1], bytes[read_offset+2], bytes[read_offset+3]];
+                let chunk_len = u32::from_be_bytes(len_bytes) as usize;
+                let chunk_type = &bytes[read_offset+4..read_offset+8];
+
+                if read_offset + 8 + chunk_len + 4 > bytes.len() {
+                    let avail = bytes.len() - (read_offset + 8);
+                    fixed.extend_from_slice(&(avail as u32).to_be_bytes());
+                    fixed.extend_from_slice(chunk_type);
+                    fixed.extend_from_slice(&bytes[read_offset+8 .. read_offset+8+avail]);
+
+                    let true_crc = calculate_crc32(chunk_type, &bytes[read_offset+8 .. read_offset+8+avail]);
+                    fixed.extend_from_slice(&true_crc.to_be_bytes());
+                    break;
+                }
+
+                let chunk_data = &bytes[read_offset+8 .. read_offset+8+chunk_len];
+                let true_crc = calculate_crc32(chunk_type, chunk_data);
+
+                fixed.extend_from_slice(&len_bytes);
+                fixed.extend_from_slice(chunk_type);
+                fixed.extend_from_slice(chunk_data);
+                fixed.extend_from_slice(&true_crc.to_be_bytes());
+
+                if chunk_type == b"IEND" {
+                    found_iend = true;
+                    break;
+                }
+
+                read_offset += 8 + chunk_len + 4;
+            }
+
+            if !found_iend {
+                fixed.extend_from_slice(&[0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60, 0x82]);
+            }
+
+            fixed
+        }
+
+        fn patch_png_height(sanitized: &[u8], new_height: u32) -> Vec<u8> {
+            let mut patched = sanitized.to_vec();
+            patched[20..24].copy_from_slice(&new_height.to_be_bytes());
+
+            let crc = calculate_crc32(&patched[12..29], &[]);
+            patched[29..33].copy_from_slice(&crc.to_be_bytes());
+
+            patched
+        }
+
+        let sanitized = sanitize_png_chunks(png);
+
+        let orig_width = u32::from_be_bytes([sanitized[16], sanitized[17], sanitized[18], sanitized[19]]);
+        let orig_height = u32::from_be_bytes([sanitized[20], sanitized[21], sanitized[22], sanitized[23]]).min(10000);
+
+        let mut low = 1;
+        let mut high = orig_height;
+        let mut best_img = None;
+
+        // Binary-search to extract the maximum surviving partial image
+        while low <= high {
+            let mid = low + (high - low) / 2;
+            let test_buffer = patch_png_height(&sanitized, mid);
+
+            if let Ok(img) = image::load_from_memory(&test_buffer) {
+                best_img = Some(img.to_rgba8());
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        if let Some(partial) = best_img {
+            let mut full_canvas = RgbaImage::new(orig_width, orig_height);
+            for y in 0..partial.height() {
+                for x in 0..partial.width() {
+                    full_canvas.put_pixel(x, y, *partial.get_pixel(x, y));
+                }
+            }
+            return Some(full_canvas);
+        }
+
+        None
     }
 }
