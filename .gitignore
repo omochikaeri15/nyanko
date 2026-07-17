@@ -5,5 +5,6 @@ target/
 .idea/
 *swp
 .DS_Store
+modules.md
 Thumbs.db
 examples/assets
