@@ -61,15 +61,21 @@ fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, UnitEvolve>, UnitEvolveError
             raw_string.replace("<br>", "\n")
         };
 
-        let mut true_form = vec![get_text(0), get_text(1), get_text(2)];
-        if true_form.iter().any(|s| !s.is_empty()) {
+        let mut true_form: Vec<String> = [get_text(0), get_text(1), get_text(2)]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !true_form.is_empty() {
             true_form.dedup();
             texts[2] = Some(true_form);
             has_content = true;
         }
 
-        let mut ultra_form = vec![get_text(4), get_text(5), get_text(6)];
-        if ultra_form.iter().any(|s| !s.is_empty()) {
+        let mut ultra_form: Vec<String> = [get_text(4), get_text(5), get_text(6)]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !ultra_form.is_empty() {
             ultra_form.dedup();
             texts[3] = Some(ultra_form);
             has_content = true;

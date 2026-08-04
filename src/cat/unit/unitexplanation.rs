@@ -71,9 +71,10 @@ fn parse_inner(bytes: &[u8]) -> Result<UnitExplanation, UnitExplanationError> {
             .skip(1)
             .take(3)
             .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .collect();
 
-        if !desc_lines.is_empty() && desc_lines.iter().any(|s| !s.is_empty()) {
+        if !desc_lines.is_empty() {
             has_content = true;
             descriptions[line_index] = Some(desc_lines);
         }
