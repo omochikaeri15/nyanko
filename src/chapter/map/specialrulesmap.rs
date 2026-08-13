@@ -30,6 +30,7 @@ pub enum RuleType {
     MoreThanOne(Vec<u32>),
     MegaCatCannon(Vec<u32>),
     UniformMotion(Vec<u32>),
+    CompoundingCost(Vec<u32>),
     Unknown(u8, Vec<u32>),
 }
 
@@ -92,6 +93,7 @@ fn parse_inner(json_str: &str) -> Result<SpecialRulesMap, SpecialRulesMapError> 
                     8 => RuleType::MoreThanOne(params),
                     9 => RuleType::MegaCatCannon(params),
                     10 => RuleType::UniformMotion(params),
+                    11 => RuleType::CompoundingCost(params),
                     _ => RuleType::Unknown(r_id, params),
                 };
 
