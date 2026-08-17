@@ -1,23 +1,52 @@
+//! Recognition of combat abilities from raw statistic columns.
+//!
+//! The engine does not name a unit's abilities anywhere. Each ability is a
+//! pattern across one or more statistic columns, and recognizing it means
+//! knowing which columns to read and how to interpret their sentinels. This
+//! module holds that knowledge as a static registry.
+
 use crate::cat::unit::TalentGroup;
 use crate::common::data::img015;
 
 use super::{Entity, Faction};
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+/// The unit an ability attribute's value is expressed in.
+///
+/// Attribute values are bare integers whose meaning depends on their source
+/// column; this tag travels alongside so a caller can render them correctly.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum AttrUnit {
+    /// A bare count or flag carrying no unit.
     None,
+    /// A percentage.
     Percent,
+    /// A duration in frames, at thirty frames per second.
     Frames,
+    /// A distance in engine distance units.
     Range,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+/// An ability attribute's value, which may be unbounded.
+///
+/// Some columns use a negative value to mean the effect never expires rather
+/// than a negative quantity.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum AttrValue {
+    /// A bounded value, stored exactly as the engine records it.
     Finite(i32),
+    /// An unbounded value, produced by the engine's negative sentinel.
     Infinite,
 }
 
 impl AttrValue {
+    /// Interprets a raw column value that uses a negative unbounded sentinel.
+    ///
+    /// # Arguments
+    /// * `raw` - The value exactly as the engine records it.
+    ///
+    /// # Returns
+    /// An `AttrValue` that is `Infinite` when the raw value is negative, and
+    /// `Finite` carrying the raw value otherwise.
     pub fn from_sentinel(raw: i32) -> Self {
         if raw < 0 { Self::Infinite } else { Self::Finite(raw) }
     }
@@ -29,40 +58,240 @@ impl From<i32> for AttrValue {
     }
 }
 
+/// One named, unit-tagged quantity describing part of an ability's effect.
+///
+/// The three elements are the attribute's display label, its value, and the
+/// unit that value is expressed in.
 pub type Attribute = (&'static str, AttrValue, AttrUnit);
 
+/// Identifies a distinct combat ability.
+///
+/// No single column names an ability, so this supplies the stable identifier the
+/// registry and its lookups are keyed by.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum Identity {
-    SingleAttack, AreaAttack, MultiHit, LongDistance, OmniStrike,
-    TraitRed, TraitFloating, TraitDark, TraitMetal, TraitTraitless, TraitAngel,
-    TraitAlien, TraitZombie, TraitWitch, TraitEva, TraitRelic, TraitAku,
-    TraitDojo, TraitStarredAlien, TraitCatGod, TraitBehemoth, TraitColossus,
-    TraitSage, TraitKaijin,
-    AttackOnly, StrongAgainst, MassiveDamage, InsaneDamage, Resist, InsanelyTough,
-    IsMetal, DoubleBounty, ZombieKiller, Soulstrike, ColossusSlayer, SageSlayer,
-    BehemothSlayer, WitchKiller, EvaKiller, MetalKiller, BarrierBreaker,
-    ShieldPiercer, Conjure,
-    BaseDestroyer, Kamikaze, Stop, WaveBlock, CounterSurge, WaveAttack, MiniWave,
-    SurgeAttack, MiniSurge, Explosion, SavageBlow, CriticalHit, Strengthen,
-    Survive, Dodge, Weaken, Freeze, Slow, Knockback, Curse, Warp, Unknown,
-    Barrier, AkuShield, Burrow, Revive, Toxic, Drain, DeathSurge,
-    ImmuneWave, ImmuneSurge, ImmuneExplosion, ImmuneWeaken, ImmuneFreeze,
-    ImmuneSlow, ImmuneKnockback, ImmuneCurse, ImmuneToxic, ImmuneWarp,
+    /// Damages only the first target within the hitbox.
+    SingleAttack,
+    /// Damages every target within the hitbox.
+    AreaAttack,
+    /// Attacks in a sequence of two or three separate hits.
+    MultiHit,
+    /// Attacks a band of ground at a distance rather than at contact range.
+    LongDistance,
+    /// Attacks a band extending behind the unit as well as in front.
+    OmniStrike,
+    /// Carries the Red trait.
+    TraitRed,
+    /// Carries the Floating trait.
+    TraitFloating,
+    /// Carries the Black trait.
+    TraitDark,
+    /// Carries the Metal trait.
+    TraitMetal,
+    /// Carries the Traitless trait.
+    TraitTraitless,
+    /// Carries the Angel trait.
+    TraitAngel,
+    /// Carries the Alien trait.
+    TraitAlien,
+    /// Carries the Zombie trait.
+    TraitZombie,
+    /// Carries the Witch trait.
+    TraitWitch,
+    /// Carries the Eva Angel trait.
+    TraitEva,
+    /// Carries the Relic trait.
+    TraitRelic,
+    /// Carries the Aku trait.
+    TraitAku,
+    /// Carries the Dojo trait.
+    TraitDojo,
+    /// Carries the Starred Alien trait.
+    TraitStarredAlien,
+    /// Carries the Cat God trait.
+    TraitCatGod,
+    /// Carries the Behemoth trait.
+    TraitBehemoth,
+    /// Carries the Colossus trait.
+    TraitColossus,
+    /// Carries the Sage trait.
+    TraitSage,
+    /// Carries the Kaijin trait.
+    TraitKaijin,
+    /// Attacks without blocking the advance of opponents.
+    AttackOnly,
+    /// Deals increased damage to, and takes reduced damage from, its target traits.
+    StrongAgainst,
+    /// Deals substantially increased damage to its target traits.
+    MassiveDamage,
+    /// Deals the highest tier of increased damage to its target traits.
+    InsaneDamage,
+    /// Takes reduced damage from its target traits.
+    Resist,
+    /// Takes the highest tier of reduced damage from its target traits.
+    InsanelyTough,
+    /// Takes one damage from every hit except critical hits.
+    IsMetal,
+    /// Yields twice the ordinary currency when defeated.
+    DoubleBounty,
+    /// Deals increased damage to Zombie targets and prevents their revival.
+    ZombieKiller,
+    /// Strikes Zombie targets while they are burrowed.
+    Soulstrike,
+    /// Deals increased damage to, and takes reduced damage from, Colossus targets.
+    ColossusSlayer,
+    /// Deals increased damage to, and takes reduced damage from, Sage targets.
+    SageSlayer,
+    /// Deals increased damage to Behemoth targets and may evade their attacks.
+    BehemothSlayer,
+    /// Deals increased damage to, and takes reduced damage from, Witch targets.
+    WitchKiller,
+    /// Deals increased damage to, and takes reduced damage from, Eva Angel targets.
+    EvaKiller,
+    /// Deals damage proportional to a Metal target's maximum health.
+    MetalKiller,
+    /// Destroys a target's barrier outright.
+    BarrierBreaker,
+    /// Ignores a target's shield.
+    ShieldPiercer,
+    /// Summons a spirit copy of another unit.
+    Conjure,
+    /// Deals increased damage to bases.
+    BaseDestroyer,
+    /// Is removed from the field after attacking once.
+    Kamikaze,
+    /// Halts rather than attacking.
+    Stop,
+    /// Ignores shockwaves and prevents them passing further.
+    WaveBlock,
+    /// Retaliates against surges that strike it.
+    CounterSurge,
+    /// Emits a shockwave that travels along the ground on attack.
+    WaveAttack,
+    /// Emits a shockwave dealing reduced damage on attack.
+    MiniWave,
+    /// Creates a surge at a distant point on attack.
+    SurgeAttack,
+    /// Creates a surge dealing reduced damage on attack.
+    MiniSurge,
+    /// Creates an explosion at a distant point on attack.
+    Explosion,
+    /// Occasionally deals a substantial bonus strike.
+    SavageBlow,
+    /// Occasionally deals doubled damage that also affects Metal targets.
+    CriticalHit,
+    /// Gains increased attack once its health falls below a threshold.
+    Strengthen,
+    /// Occasionally survives a lethal hit with one health remaining.
+    Survive,
+    /// Occasionally becomes briefly invulnerable to its target traits.
+    Dodge,
+    /// Occasionally reduces a target's attack power for a period.
+    Weaken,
+    /// Occasionally immobilizes a target for a period.
+    Freeze,
+    /// Occasionally reduces a target's movement and attack rate for a period.
+    Slow,
+    /// Occasionally repels a target backwards.
+    Knockback,
+    /// Occasionally suppresses a target's trait-based abilities for a period.
+    Curse,
+    /// Occasionally displaces a target backwards and immobilizes it.
+    Warp,
+    /// An ability the source row implies but this crate does not recognize.
+    Unknown,
+    /// Carries a barrier absorbing damage until it is broken.
+    Barrier,
+    /// Carries an Aku shield absorbing damage until it is broken.
+    AkuShield,
+    /// Travels beneath attacks for part of its approach.
+    Burrow,
+    /// Returns to the field after being defeated.
+    Revive,
+    /// Occasionally deals damage proportional to a target's maximum health.
+    Toxic,
+    /// Restores health proportional to the damage it deals.
+    Drain,
+    /// Creates a surge at a distant point when defeated.
+    DeathSurge,
+    /// Is wholly unaffected by shockwaves.
+    ImmuneWave,
+    /// Is wholly unaffected by surges.
+    ImmuneSurge,
+    /// Is wholly unaffected by explosions.
+    ImmuneExplosion,
+    /// Is wholly unaffected by the weaken effect.
+    ImmuneWeaken,
+    /// Is wholly unaffected by the freeze effect.
+    ImmuneFreeze,
+    /// Is wholly unaffected by the slow effect.
+    ImmuneSlow,
+    /// Is wholly unaffected by knockback.
+    ImmuneKnockback,
+    /// Is wholly unaffected by the curse effect.
+    ImmuneCurse,
+    /// Is wholly unaffected by toxic damage.
+    ImmuneToxic,
+    /// Is wholly unaffected by the warp effect.
+    ImmuneWarp,
+    /// Is wholly unaffected by the boss wave knockback.
     ImmuneBossWave,
-    ResistWeaken, ResistFreeze, ResistSlow, ResistKnockback, ResistWave,
-    ResistWarp, ResistCurse, ResistToxic, ResistSurge,
-    CostDown, RecoverSpeedUp, MoveSpeedUp, AttackBuff, HealthBuff, TbaDown,
+    /// Has the duration or strength of the weaken effect reduced against it.
+    ResistWeaken,
+    /// Has the duration or strength of the freeze effect reduced against it.
+    ResistFreeze,
+    /// Has the duration or strength of the slow effect reduced against it.
+    ResistSlow,
+    /// Has the duration or strength of knockback reduced against it.
+    ResistKnockback,
+    /// Has the duration or strength of shockwaves reduced against it.
+    ResistWave,
+    /// Has the duration or strength of the warp effect reduced against it.
+    ResistWarp,
+    /// Has the duration or strength of the curse effect reduced against it.
+    ResistCurse,
+    /// Has the duration or strength of toxic damage reduced against it.
+    ResistToxic,
+    /// Has the duration or strength of surges reduced against it.
+    ResistSurge,
+    /// Reduces its own deployment cost.
+    CostDown,
+    /// Reduces its own redeployment delay.
+    RecoverSpeedUp,
+    /// Increases its own movement rate.
+    MoveSpeedUp,
+    /// Increases its own attack power.
+    AttackBuff,
+    /// Increases its own health pool.
+    HealthBuff,
+    /// Reduces its own delay between attacks.
+    TbaDown,
+    /// Increases the number of times it may be repelled before being defeated.
     ImproveKnockbacks,
 }
 
+/// The complete definition of one combat ability.
+///
+/// An ability is a pattern across several statistic columns rather than a stored
+/// value, so its definition carries the logic to extract it. Holding that as a
+/// function pointer keeps the registry in immutable static memory.
 pub struct Ability {
+    /// The stable identifier this ability is keyed by.
     pub identity: Identity,
+    /// The talent identifier that grants this ability, when it can be granted as a talent.
     pub talent_id: Option<u8>,
+    /// The sprite index of this ability's icon in the `img015` atlas, when it has one.
     pub icon_id: Option<usize>,
+    /// The ability's display name.
     pub name: &'static str,
+    /// The ability's explanatory text.
     pub description: &'static str,
+    /// The labels and units of the attributes `attributes` produces, in the same order.
     pub schema: &'static [(&'static str, AttrUnit)],
+    /// Extracts this ability's attributes from an entity, yielding an empty vector when the entity lacks the ability.
     pub attributes: fn(&Entity) -> Vec<Attribute>,
+    /// Applies this ability to an entity as a talent upgrade, when it can be granted as one.
     pub apply_talent: Option<fn(&mut Entity, val1: i32, val2: i32, group: &TalentGroup)>,
 }
 
@@ -98,14 +327,34 @@ fn has_long_distance(stats: &Entity) -> bool {
         (stats.long_distance_3_flag > 0 && stats.long_distance_3_span > 0)
 }
 
+/// Looks up the ability a talent identifier grants.
+///
+/// # Arguments
+/// * `id` - The talent identifier recorded on a talent group.
+///
+/// # Returns
+/// An `Option` containing a reference to the matching `Ability`, or `None` when
+/// no ability is granted by that talent identifier.
 pub fn get_talent(id: u8) -> Option<&'static Ability> {
     REGISTRY.iter().find(|ability| ability.talent_id == Some(id))
 }
 
+/// Looks up an ability's definition by its identifier.
+///
+/// # Arguments
+/// * `identity` - The ability to retrieve.
+///
+/// # Returns
+/// An `Option` containing a reference to the matching `Ability`, or `None` when
+/// the registry carries no definition for it.
 pub fn get_ability(identity: Identity) -> Option<&'static Ability> {
     REGISTRY.iter().find(|ability| ability.identity == identity)
 }
 
+/// The definitions of every combat ability this crate recognizes.
+///
+/// Prefer [`get_ability`] and [`get_talent`] over scanning this directly; the
+/// ordering of the entries is not part of the interface and may change.
 pub static REGISTRY: &[Ability] = &[
     Ability {
         identity: Identity::SingleAttack,

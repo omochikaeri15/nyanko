@@ -5,7 +5,9 @@ use crate::common::tools::file;
 
 /// Represents errors that can occur during the parsing of localized enemy names.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EnemyNameError {
+    /// The supplied bytes yielded no lines at all.
     EmptyData,
 }
 
@@ -19,40 +21,46 @@ impl fmt::Display for EnemyNameError {
 
 impl error::Error for EnemyNameError {}
 
-/// Represents the localized display name for an enemy entity.
+/// An enemy's localized display name.
 ///
-/// This structure cleanly encapsulates a sanitized string. It automatically identifies
-/// and rejects internal developer placeholders (such as "ダミー") to ensure the UI
-/// does not render invalid terminology. Missing or invalid names evaluate to `None`.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+/// Developer placeholders such as "ダミー" are rejected, so an unnamed or
+/// placeholder enemy evaluates to `None`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EnemyName {
     /// The parsed display name. `None` if the name is a placeholder or empty.
     pub name: Option<String>,
 }
 
 impl EnemyName {
-    /// Parses a raw byte stream into a vector of `EnemyName` structures.
+    /// Parses the enemy terminology table into one entry per declared enemy.
+    ///
+    /// Every line contributes an entry, including blank ones, so an entry's
+    /// position in the returned vector is its internal enemy identifier.
     ///
     /// # Arguments
-    /// * `b` - The raw byte slice of the terminology file.
+    /// * `bytes` - The raw, decrypted byte slice of the terminology file.
     ///
     /// # Returns
-    /// A `Result` containing the vector of structured `EnemyName`s on success, or an
-    /// `EnemyNameError` if the file contained no parseable text.
-    pub fn parse_all<T: AsRef<[u8]>>(b: T) -> Result<Vec<Self>, EnemyNameError> {
-        parse_all_inner(b.as_ref())
+    /// A `Result` containing the parsed names indexed by enemy identifier on
+    /// success, or an `EnemyNameError` if the file contained no lines.
+    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Self>, EnemyNameError> {
+        parse_inner(bytes.as_ref())
     }
 
-    /// Safely extracts and parses a single `EnemyName` based on its internal ID line index.
+    /// Parses a single row of the enemy terminology table by enemy identifier.
+    ///
+    /// This avoids materializing the entire table when only one name is
+    /// required.
     ///
     /// # Arguments
-    /// * `b` - The raw byte slice of the terminology file.
-    /// * `id` - The specific line index corresponding to the enemy's internal ID.
+    /// * `bytes` - The raw, decrypted byte slice of the terminology file.
+    /// * `id` - The internal enemy identifier, used as a zero-based line offset.
     ///
     /// # Returns
-    /// A `Result` containing an `Option<EnemyName>` if the line exists, or `None` if the ID is out of bounds.
-    pub fn parse<T: AsRef<[u8]>>(b: T, id: usize) -> Result<Option<Self>, EnemyNameError> {
-        parse_inner(b.as_ref(), id)
+    /// An `Option` containing the parsed name, or `None` if the identifier lies
+    /// beyond the end of the table.
+    pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Self> {
+        parse_row_inner(bytes.as_ref(), id)
     }
 }
 
@@ -65,14 +73,14 @@ fn parse_line_data(line: &str, separator: char) -> EnemyName {
     }
 }
 
-fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyName>, EnemyNameError> {
+fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyName>, EnemyNameError> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
-    let mut names = Vec::new();
 
-    for line in content.lines() {
-        names.push(parse_line_data(line, separator));
-    }
+    let names: Vec<EnemyName> = content
+        .lines()
+        .map(|line| parse_line_data(line, separator))
+        .collect();
 
     if names.is_empty() {
         return Err(EnemyNameError::EmptyData);
@@ -81,13 +89,9 @@ fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyName>, EnemyNameError> {
     Ok(names)
 }
 
-fn parse_inner(bytes: &[u8], id: usize) -> Result<Option<EnemyName>, EnemyNameError> {
+fn parse_row_inner(bytes: &[u8], id: usize) -> Option<EnemyName> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
 
-    let Some(target_line) = content.lines().nth(id) else {
-        return Ok(None);
-    };
-
-    Ok(Some(parse_line_data(target_line, separator)))
+    content.lines().nth(id).map(|line| parse_line_data(line, separator))
 }

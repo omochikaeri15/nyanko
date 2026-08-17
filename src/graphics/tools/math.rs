@@ -1,7 +1,30 @@
+//! Integer arithmetic helpers used when reconciling animation loop lengths.
+
+/// Calculates the greatest common divisor of two integers.
+///
+/// # Arguments
+/// * `number1` - The first operand.
+/// * `number2` - The second operand.
+///
+/// # Returns
+/// An `i32` containing the largest integer dividing both operands, or the
+/// non-zero operand when the other is zero.
 pub fn gcd(number1: i32, number2: i32) -> i32 {
     if number2 == 0 { number1 } else { gcd(number2, number1 % number2) }
 }
 
+/// Calculates the least common multiple of two integers.
+///
+/// The result is widened to 64 bits because the product of two plausible
+/// animation lengths readily exceeds the range of the inputs.
+///
+/// # Arguments
+/// * `number1` - The first operand.
+/// * `number2` - The second operand.
+///
+/// # Returns
+/// An `i64` containing the smallest positive integer both operands divide, or
+/// zero when either operand is zero.
 pub fn lcm(number1: i32, number2: i32) -> i64 {
     if number1 == 0 || number2 == 0 {
         0

@@ -1,3 +1,4 @@
+//! Lineup restrictions that stages impose on the player's deployable units.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of stage lineup restrictions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StageOptionError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,25 +27,50 @@ impl fmt::Display for StageOptionError {
 
 impl std::error::Error for StageOptionError {}
 
+/// One lineup restriction and the stages it applies to.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StageOptionEntry {
+    /// The identifier of the map the restriction applies to.
     pub map_id: u32,
+    /// The crown difficulty the restriction applies at, or negative to apply at every difficulty.
     pub target_crowns: i8,
+    /// The index of the stage the restriction applies to, or negative to apply to every stage.
     pub target_stage: i32,
+    /// A bitmask of the rarity tiers permitted, where each bit selects one tier.
     pub rarity_mask: u8,
+    /// The greatest number of units deployable at once.
     pub deploy_limit: u32,
+    /// A bitmask of the lineup rows permitted, where each bit selects one row.
     pub allowed_rows: u8,
+    /// The lowest deployment cost a unit may have to be eligible.
     pub min_cost: u32,
+    /// The highest deployment cost a unit may have to be eligible.
     pub max_cost: u32,
+    /// The identifier of the unit restriction group applied, or zero when none is.
     pub charagroup_id: u32,
 }
 
+/// The parsed contents of the stage lineup restriction table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StageOption {
+    /// The restrictions applying to each map, keyed by map identifier.
     pub entries: HashMap<u32, Vec<StageOptionEntry>>,
 }
 
 impl StageOption {
+    /// Parses the stage lineup restriction table into per-map restriction lists.
+    ///
+    /// A map may declare several restrictions covering different stages and
+    /// crown difficulties, and a single restriction may apply across all of
+    /// them, so each map's restrictions are collected into a list rather than
+    /// reduced to one.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the stage option file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `StageOption` on success, or a
+    /// `StageOptionError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, StageOptionError> {
         parse_inner(bytes.as_ref())
     }
@@ -78,60 +107,52 @@ fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
         let Ok(map_id) = raw_map_id_str.trim().parse::<u32>() else { continue; };
 
         let mut target_crowns: i8 = -1;
-        if let Some(val_str) = parts.get(1) {
-            if let Ok(parsed) = val_str.trim().parse::<i8>() {
+        if let Some(val_str) = parts.get(1)
+            && let Ok(parsed) = val_str.trim().parse::<i8>() {
                 target_crowns = parsed;
             }
-        }
 
         let mut target_stage: i32 = -1;
-        if let Some(val_str) = parts.get(2) {
-            if let Ok(parsed) = val_str.trim().parse::<i32>() {
+        if let Some(val_str) = parts.get(2)
+            && let Ok(parsed) = val_str.trim().parse::<i32>() {
                 target_stage = parsed;
             }
-        }
 
         let mut rarity_mask: u8 = 0;
-        if let Some(val_str) = parts.get(3) {
-            if let Ok(parsed) = val_str.trim().parse::<u8>() {
+        if let Some(val_str) = parts.get(3)
+            && let Ok(parsed) = val_str.trim().parse::<u8>() {
                 rarity_mask = parsed;
             }
-        }
 
         let mut deploy_limit: u32 = 0;
-        if let Some(val_str) = parts.get(4) {
-            if let Ok(parsed) = val_str.trim().parse::<u32>() {
+        if let Some(val_str) = parts.get(4)
+            && let Ok(parsed) = val_str.trim().parse::<u32>() {
                 deploy_limit = parsed;
             }
-        }
 
         let mut allowed_rows: u8 = 0;
-        if let Some(val_str) = parts.get(5) {
-            if let Ok(parsed) = val_str.trim().parse::<u8>() {
+        if let Some(val_str) = parts.get(5)
+            && let Ok(parsed) = val_str.trim().parse::<u8>() {
                 allowed_rows = parsed;
             }
-        }
 
         let mut min_cost: u32 = 0;
-        if let Some(val_str) = parts.get(6) {
-            if let Ok(parsed) = val_str.trim().parse::<u32>() {
+        if let Some(val_str) = parts.get(6)
+            && let Ok(parsed) = val_str.trim().parse::<u32>() {
                 min_cost = parsed;
             }
-        }
 
         let mut max_cost: u32 = 0;
-        if let Some(val_str) = parts.get(7) {
-            if let Ok(parsed) = val_str.trim().parse::<u32>() {
+        if let Some(val_str) = parts.get(7)
+            && let Ok(parsed) = val_str.trim().parse::<u32>() {
                 max_cost = parsed;
             }
-        }
 
         let mut charagroup_id: u32 = 0;
-        if let Some(val_str) = parts.get(8) {
-            if let Ok(parsed) = val_str.trim().parse::<u32>() {
+        if let Some(val_str) = parts.get(8)
+            && let Ok(parsed) = val_str.trim().parse::<u32>() {
                 charagroup_id = parsed;
             }
-        }
 
         let entry = StageOptionEntry {
             map_id,

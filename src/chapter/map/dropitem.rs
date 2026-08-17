@@ -1,3 +1,4 @@
+//! Reward drop configuration for map clears.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of map drop tables.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DropItemError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,21 +27,41 @@ impl fmt::Display for DropItemError {
 
 impl std::error::Error for DropItemError {}
 
+/// The reward drop configuration for a single map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DropItemEntry {
+    /// The identifier of the map this configuration applies to.
     pub map_id: u32,
+    /// The reward scaling applied at each of the four crown difficulties.
     pub crown_multipliers: [f32; 4],
+    /// The item identifiers awarded for clearing individual stages.
     pub stage_drops: [u32; 8],
+    /// The percentage chance that a drop attempt yields nothing.
     pub dud_chance: u32,
+    /// The item identifiers awarded from the map's material reward pool.
     pub material_drops: [u32; 16],
 }
 
+/// The parsed contents of the map drop table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct DropItem {
+    /// The drop configurations, keyed by map identifier.
     pub map_drops: HashMap<u32, DropItemEntry>,
 }
 
 impl DropItem {
+    /// Parses the map drop table into per-map reward configurations.
+    ///
+    /// Rows are addressed by the map identifier in their leading column rather
+    /// than by position. Trailing comment text introduced by a double slash is
+    /// discarded before the columns are read.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the drop item file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `DropItem` on success, or a
+    /// `DropItemError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, DropItemError> {
         parse_inner(bytes.as_ref())
     }
@@ -45,32 +69,29 @@ impl DropItem {
 
 fn extract_f32_array<const SIZE: usize>(parts: &[&str], start_index: usize) -> Option<[f32; SIZE]> {
     let mut result = [0.0; SIZE];
-    for offset in 0..SIZE {
+    for (offset, slot) in result.iter_mut().enumerate() {
         let string_part = parts.get(start_index + offset)?;
-        let parsed_value: f32 = string_part.trim().parse().ok()?;
-        result[offset] = parsed_value;
+        *slot = string_part.trim().parse().ok()?;
     }
     Some(result)
 }
 
 fn extract_u32_array<const SIZE: usize>(parts: &[&str], start_index: usize) -> Option<[u32; SIZE]> {
     let mut result = [0; SIZE];
-    for offset in 0..SIZE {
+    for (offset, slot) in result.iter_mut().enumerate() {
         let string_part = parts.get(start_index + offset)?;
-        let parsed_value: u32 = string_part.trim().parse().ok()?;
-        result[offset] = parsed_value;
+        *slot = string_part.trim().parse().ok()?;
     }
     Some(result)
 }
 
 fn extract_u32_array_optional<const SIZE: usize>(parts: &[&str], start_index: usize) -> [u32; SIZE] {
     let mut result = [0; SIZE];
-    for offset in 0..SIZE {
-        if let Some(string_part) = parts.get(start_index + offset) {
-            if let Ok(parsed_value) = string_part.trim().parse::<u32>() {
-                result[offset] = parsed_value;
+    for (offset, slot) in result.iter_mut().enumerate() {
+        if let Some(string_part) = parts.get(start_index + offset)
+            && let Ok(parsed_value) = string_part.trim().parse::<u32>() {
+                *slot = parsed_value;
             }
-        }
     }
     result
 }

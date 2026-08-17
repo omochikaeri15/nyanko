@@ -1,3 +1,5 @@
+//! AES decryption and encryption of asset pack chunks and manifests.
+
 mod ciphers;
 mod verify;
 
@@ -9,21 +11,36 @@ use ciphers::{decrypt_cbc, decrypt_ecb, encrypt_cbc, encrypt_ecb, get_md5_key};
 
 pub use verify::check_integrity;
 
+/// Represents errors that can occur while decrypting or encrypting pack data.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PackError {
-    InvalidHexFormat,
-    InvalidKeyLength,
+    /// A key or IV string for the named region was not valid hexadecimal.
+    ///
+    /// The strings are decoded verbatim, so surrounding whitespace or a
+    /// trailing newline read from a configuration file will produce this.
+    InvalidHexFormat(Region),
+    /// A key or IV string for the named region decoded to something other than 16 bytes.
+    InvalidKeyLength(Region),
+    /// A standard pack was encrypted without the key and IV that mode requires.
     MissingCipherParameters,
+    /// AES decryption completed but the resulting padding was not valid.
     DecryptionFailed,
+    /// AES encryption failed while applying padding to the input.
     EncryptionFailed,
+    /// No known manifest key produced readable text from the supplied bytes.
     ListDecryptionFailed,
 }
 
 impl fmt::Display for PackError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidHexFormat => write!(f, "Invalid hexadecimal format"),
-            Self::InvalidKeyLength => write!(f, "Decoded key or IV must be exactly 16 bytes"),
+            Self::InvalidHexFormat(region) => {
+                write!(f, "Invalid hexadecimal format in the key or IV for region {region:?}")
+            }
+            Self::InvalidKeyLength(region) => {
+                write!(f, "Decoded key or IV for region {region:?} must be exactly 16 bytes")
+            }
             Self::MissingCipherParameters => write!(f, "Required key and IV parameters were not provided"),
             Self::DecryptionFailed => write!(f, "AES decryption or padding validation failed"),
             Self::EncryptionFailed => write!(f, "AES encryption or padding application failed"),
@@ -34,34 +51,68 @@ impl fmt::Display for PackError {
 
 impl Error for PackError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PackType { Standard, Server, ImageData }
+/// Selects the encryption strategy that applies to a given pack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PackType {
+    /// A regional pack, encrypted with AES in CBC mode using a region-specific key and IV.
+    Standard,
+    /// A server-delivered pack, encrypted with AES in ECB mode using a fixed derived key.
+    Server,
+    /// An image pack, which the engine stores unencrypted.
+    ImageData,
+}
 
+/// Records how a chunk was recovered by [`decrypt_chunk`].
+///
+/// Passthrough is ordinary behavior rather than a failure, since the engine
+/// stores some formats unencrypted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Decrypted {
+    /// A regional CBC cipher matched and produced the returned plaintext.
+    Regional(Region),
+    /// The fixed server ECB key matched and produced the returned plaintext.
+    Server,
+    /// No cipher produced data matching the expected file, so the input was returned verbatim.
+    ///
+    /// Expected for formats stored unencrypted, and equally what wrong keys
+    /// produce; this value alone does not separate the two.
+    Passthrough,
+}
+
+/// A single region's AES key material.
+///
+/// Deliberately does not implement `Debug`, to keep key material out of logs.
 #[derive(Clone)]
 pub struct RegionalCipher {
+    /// The region these parameters decrypt.
     pub region: Region,
+    /// The 16-byte AES-128 key.
     pub key: [u8; 16],
+    /// The 16-byte AES-128 initialization vector.
     pub iv: [u8; 16],
 }
 
-#[derive(Default)]
+/// A collection of per-region AES parameters to attempt decryption with.
+///
+/// Deliberately does not implement `Debug`, to keep key material out of logs.
+#[derive(Clone, Default)]
 pub struct Keys {
+    /// The regional ciphers, attempted in the order they appear.
     pub ciphers: Vec<RegionalCipher>,
 }
 
 impl Keys {
-    /// Parses a collection of raw hexadecimal key and initialization vector (IV) strings
-    /// into a structured `Keys` instance.
+    /// Parses hex-encoded key and IV strings into a structured `Keys` instance.
     ///
-    /// This function decodes the hexadecimal strings and strictly validates that
-    /// the resulting byte arrays conform to the required 16-byte length for AES-128.
+    /// Each decoded value must be exactly 16 bytes, as AES-128 requires. The
+    /// strings are decoded exactly as supplied, with no trimming.
     ///
     /// # Arguments
     /// * `tuples` - A slice of tuples containing the `Region`, the hex-encoded key string, and the hex-encoded IV string.
     ///
     /// # Returns
     /// A `Result` containing the populated `Keys` instance on success, or a `PackError`
-    /// if any of the hex strings are invalid or improperly sized.
+    /// naming the region whose hex string was invalid or improperly sized.
     pub fn parse(tuples: &[(Region, &str, &str)]) -> Result<Self, PackError> {
         let mut ciphers = Vec::with_capacity(tuples.len());
         for (region, hex_key, hex_iv) in tuples {
@@ -71,22 +122,21 @@ impl Keys {
     }
 
     fn parse_cipher(region: Region, hex_key: &str, hex_iv: &str) -> Result<RegionalCipher, PackError> {
-        let key_bytes = hex::decode(hex_key).map_err(|_| PackError::InvalidHexFormat)?;
-        let iv_bytes = hex::decode(hex_iv).map_err(|_| PackError::InvalidHexFormat)?;
+        let key_bytes = hex::decode(hex_key).map_err(|_| PackError::InvalidHexFormat(region))?;
+        let iv_bytes = hex::decode(hex_iv).map_err(|_| PackError::InvalidHexFormat(region))?;
 
-        let key: [u8; 16] = key_bytes.try_into().map_err(|_| PackError::InvalidKeyLength)?;
-        let iv: [u8; 16] = iv_bytes.try_into().map_err(|_| PackError::InvalidKeyLength)?;
+        let key: [u8; 16] = key_bytes.try_into().map_err(|_| PackError::InvalidKeyLength(region))?;
+        let iv: [u8; 16] = iv_bytes.try_into().map_err(|_| PackError::InvalidKeyLength(region))?;
 
         Ok(RegionalCipher { region, key, iv })
     }
 }
 
-/// Attempts to decrypt a data chunk by iterating through a set of regional ciphers
-/// and falling back to a hardcoded server key if necessary.
+/// Decrypts a data chunk, trying each regional cipher and then the server key.
 ///
-/// The function verifies a successful decryption by checking the integrity of the
-/// output against the expected internal filename. If all decryption attempts fail
-/// the integrity check, it assumes the data is unencrypted and returns it as-is.
+/// Each attempt is checked against the expected filename, so a cipher producing
+/// plausible but wrong bytes is rejected. If every attempt fails, the data is
+/// assumed unencrypted and returned unchanged.
 ///
 /// # Arguments
 /// * `data` - A byte slice containing the encrypted raw chunk data.
@@ -94,31 +144,30 @@ impl Keys {
 /// * `keys` - A reference to a `Keys` struct containing the available regional ciphers.
 ///
 /// # Returns
-/// A tuple containing the processed byte vector and an `Option<Region>`. The region is `Some`
-/// if a regional CBC cipher succeeded, `None` if the ECB server cipher succeeded, or `None`
-/// if it fell back to returning the unencrypted raw data.
-pub fn decrypt_chunk(data: &[u8], internal_filename: &str, keys: &Keys) -> (Vec<u8>, Option<Region>) {
+/// A tuple containing the processed byte vector and a `Decrypted` value recording
+/// which cipher produced it. `Decrypted::Passthrough` means the returned bytes
+/// are the unmodified input.
+pub fn decrypt_chunk(data: &[u8], internal_filename: &str, keys: &Keys) -> (Vec<u8>, Decrypted) {
     for cipher in &keys.ciphers {
         if let Ok(result) = decrypt_cbc(data, &cipher.key, &cipher.iv)
             && check_integrity(&result, internal_filename) {
-            return (result, Some(cipher.region));
+            return (result, Decrypted::Regional(cipher.region));
         }
     }
 
     let server_key = get_md5_key("battlecats");
     if let Ok(result) = decrypt_ecb(data, &server_key)
         && check_integrity(&result, internal_filename) {
-        return (result, None);
+        return (result, Decrypted::Server);
     }
 
-    (data.to_vec(), None)
+    (data.to_vec(), Decrypted::Passthrough)
 }
 
-/// Encrypts a raw data chunk based on the specified pack classification.
+/// Encrypts a raw data chunk according to its pack classification.
 ///
-/// This handles pass-through for image data, ECB encryption for server packs using
-/// a derived MD5 key, and CBC encryption for standard regional packs which require
-/// explicitly provided key and IV parameters.
+/// Image data passes through, server packs use a derived ECB key, and standard
+/// regional packs use CBC and require an explicit key and IV.
 ///
 /// # Arguments
 /// * `data` - A byte slice containing the unencrypted raw chunk data.
@@ -142,11 +191,10 @@ pub fn encrypt_chunk(data: &[u8], pack_type: PackType, key: Option<&[u8; 16]>, i
     }
 }
 
-/// Decrypts a list manifest file using predefined ECB keys.
+/// Decrypts a list manifest using the predefined ECB keys.
 ///
-/// The function attempts decryption with a standard "pack" key first. If that fails
-/// or yields invalid UTF-8 data, it falls back to a secondary "battlecats" key before
-/// failing entirely.
+/// The "pack" key is tried first, falling back to "battlecats" if it fails or
+/// yields invalid UTF-8.
 ///
 /// # Arguments
 /// * `data` - A byte slice containing the encrypted manifest list data.
@@ -166,10 +214,7 @@ pub fn decrypt_list(data: &[u8]) -> Result<String, PackError> {
     Err(PackError::ListDecryptionFailed)
 }
 
-/// Encrypts a string-based list manifest into raw bytes.
-///
-/// The manifest is encoded using the standard "pack" ECB cipher configuration
-/// expected by the engine client when parsing list files.
+/// Encrypts a list manifest into raw bytes using the "pack" ECB cipher.
 ///
 /// # Arguments
 /// * `data` - A string slice representing the unencrypted manifest content.
@@ -184,6 +229,10 @@ pub fn encrypt_list(data: &str) -> Result<Vec<u8>, PackError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::tools::variant::Region;
+
+    const KEY_HEX: &str = "0123456789abcdef0123456789abcdef";
+    const IV_HEX: &str = "fedcba9876543210fedcba9876543210";
 
     #[test]
     fn test_list_manifest_roundtrip() {
@@ -192,80 +241,93 @@ mod tests {
             .expect("Failed to encrypt synthetic manifest");
         let decrypted_manifest = decrypt_list(&encrypted_bytes)
             .expect("Failed to decrypt synthetic manifest");
+
         assert_eq!(original_manifest, decrypted_manifest);
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use crate::common::tools::variant::Region;
+    #[test]
+    fn test_standard_chunk_roundtrip() {
+        let keys = Keys::parse(&[(Region::En, KEY_HEX, IV_HEX)])
+            .expect("Failed to parse synthetic keys");
+        let cipher = &keys.ciphers[0];
+        let internal_filename = "unit_01.csv";
+        let original_payload = "HP,ATK,RANGE\n100,50,250";
 
-        #[test]
-        fn test_list_manifest_roundtrip() {
-            let original_manifest = "0,DataLocal.pack\n1,ui_001.png\n2,unit_01.csv";
-            let encrypted_bytes = encrypt_list(original_manifest)
-                .expect("Failed to encrypt synthetic manifest");
-            let decrypted_manifest = decrypt_list(&encrypted_bytes)
-                .expect("Failed to decrypt synthetic manifest");
+        let encrypted_chunk = encrypt_chunk(
+            original_payload.as_bytes(),
+            PackType::Standard,
+            Some(&cipher.key),
+            Some(&cipher.iv)
+        ).expect("Failed to encrypt standard CBC chunk");
 
-            assert_eq!(original_manifest, decrypted_manifest);
-        }
+        let (decrypted_chunk, origin) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
 
-        #[test]
-        fn test_standard_chunk_roundtrip() {
-            let key_hex = "0123456789abcdef0123456789abcdef";
-            let iv_hex  = "fedcba9876543210fedcba9876543210";
-            let keys = Keys::parse(&[(Region::En, key_hex, iv_hex)])
-                .expect("Failed to parse synthetic keys");
-            let cipher = &keys.ciphers[0];
-            let internal_filename = "unit_01.csv";
-            let original_payload = format!("HP,ATK,RANGE\n100,50,250");
+        assert_eq!(origin, Decrypted::Regional(Region::En), "Did not correctly match the EN region CBC key");
+        assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
+    }
 
-            let encrypted_chunk = encrypt_chunk(
-                original_payload.as_bytes(),
-                PackType::Standard,
-                Some(&cipher.key),
-                Some(&cipher.iv)
-            ).expect("Failed to encrypt standard CBC chunk");
+    #[test]
+    fn test_server_chunk_roundtrip() {
+        let keys = Keys::default();
 
-            let (decrypted_chunk, region) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
+        let internal_filename = "server_data.json";
+        let original_payload = "{\"status\": \"ok\", \"version\": 140200}";
+        let encrypted_chunk = encrypt_chunk(
+            original_payload.as_bytes(),
+            PackType::Server,
+            None,
+            None
+        ).expect("Failed to encrypt server ECB chunk");
 
-            assert_eq!(region, Some(Region::En), "Did not correctly match the EN region CBC key");
-            assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
-        }
+        let (decrypted_chunk, origin) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
 
-        #[test]
-        fn test_server_chunk_roundtrip() {
-            let keys = Keys::default();
+        assert_eq!(origin, Decrypted::Server, "Server packs should report a server origin");
+        assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
+    }
 
-            let internal_filename = "server_data.json";
-            let original_payload = "{\"status\": \"ok\", \"version\": 140200}";
-            let encrypted_chunk = encrypt_chunk(
-                original_payload.as_bytes(),
-                PackType::Server,
-                None,
-                None
-            ).expect("Failed to encrypt server ECB chunk");
+    #[test]
+    fn test_image_roundtrip() {
+        let dummy_image_data: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let internal_filename = "ui_001.png";
 
-            let (decrypted_chunk, region) = decrypt_chunk(&encrypted_chunk, internal_filename, &keys);
+        let encrypted = encrypt_chunk(dummy_image_data, PackType::ImageData, None, None)
+            .expect("Failed image pass-through");
 
-            assert_eq!(region, None, "Server packs should return None for Region");
-            assert_eq!(original_payload.as_bytes(), decrypted_chunk.as_slice());
-        }
+        let keys = Keys::default();
+        let (decrypted, origin) = decrypt_chunk(&encrypted, internal_filename, &keys);
 
-        #[test]
-        fn test_image_roundtrip() {
-            let dummy_image_data: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-            let internal_filename = "ui_001.png";
+        assert_eq!(origin, Decrypted::Passthrough);
+        assert_eq!(dummy_image_data, decrypted.as_slice());
+    }
 
-            let encrypted = encrypt_chunk(dummy_image_data, PackType::ImageData, None, None)
-                .expect("Failed image pass-through");
+    #[test]
+    fn test_wrong_keys_report_passthrough() {
+        let keys = Keys::parse(&[(Region::En, KEY_HEX, IV_HEX)])
+            .expect("Failed to parse synthetic keys");
+        let cipher = &keys.ciphers[0];
+        let payload = "HP,ATK,RANGE\n100,50,250";
 
-            let keys = Keys::default();
-            let (decrypted, region) = decrypt_chunk(&encrypted, internal_filename, &keys);
+        let encrypted = encrypt_chunk(
+            payload.as_bytes(),
+            PackType::Standard,
+            Some(&cipher.key),
+            Some(&cipher.iv)
+        ).expect("Failed to encrypt standard CBC chunk");
 
-            assert_eq!(region, None);
-            assert_eq!(dummy_image_data, decrypted.as_slice());
-        }
+        let other = Keys::parse(&[(Region::Ja, IV_HEX, KEY_HEX)])
+            .expect("Failed to parse synthetic keys");
+        let (returned, origin) = decrypt_chunk(&encrypted, "unit_01.csv", &other);
+
+        assert_eq!(origin, Decrypted::Passthrough);
+        assert_eq!(returned.as_slice(), encrypted.as_slice());
+    }
+
+    #[test]
+    fn test_key_error_names_region() {
+        let outcome = Keys::parse(&[(Region::Tw, "not hex", IV_HEX)]);
+        assert_eq!(outcome.err(), Some(PackError::InvalidHexFormat(Region::Tw)));
+
+        let outcome = Keys::parse(&[(Region::Ko, "abcd", IV_HEX)]);
+        assert_eq!(outcome.err(), Some(PackError::InvalidKeyLength(Region::Ko)));
     }
 }

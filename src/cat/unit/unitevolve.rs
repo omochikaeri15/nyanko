@@ -3,8 +3,11 @@ use std::fmt;
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of evolution text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UnitEvolveError {
+    /// The supplied bytes yielded no rows carrying evolution text.
     EmptyFile,
 }
 
@@ -18,19 +21,30 @@ impl fmt::Display for UnitEvolveError {
 
 impl std::error::Error for UnitEvolveError {}
 
-/// Represents the localized evolutionary text parameters for an entity.
+/// A unit's localized evolution requirement text, indexed by form.
 ///
-/// This structure maps sequences of cleansed, newline-formatted strings to
-/// their corresponding form indices, detailing the specific requirements or
-/// localized text associated with each evolutionary stage.
-/// Missing or deduplicated forms are explicitly represented as `None`.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+/// A form identical to the one before it is deduplicated to `None`, as is a form
+/// that does not exist.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnitEvolve {
     /// An array of parsed string vectors, indexed by form. `None` if the form does not exist or was deduplicated.
     pub texts: [Option<Vec<String>>; 4],
 }
 
 impl UnitEvolve {
+    /// Parses the evolution text table into rows keyed by unit identifier.
+    ///
+    /// A line's position in the file is that unit's identifier, and blank lines
+    /// are skipped without disturbing the numbering of the lines that follow.
+    /// Only units carrying at least one non-placeholder text entry are recorded,
+    /// so the returned map is sparse.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the `unitevolve.csv` file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed rows keyed by unit identifier on
+    /// success, or a `UnitEvolveError` if no row carried evolution text.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u32, Self>, UnitEvolveError> {
         parse_inner(bytes.as_ref())
     }

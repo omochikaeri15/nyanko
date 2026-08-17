@@ -1,3 +1,4 @@
+//! Localized display names for individual stages.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of localized stage names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StageNameError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,17 +27,29 @@ impl fmt::Display for StageNameError {
 
 impl std::error::Error for StageNameError {}
 
+/// The stage names belonging to a single map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StageNameEntry {
+    /// The display names in stage order, so a name's position is its stage index.
     pub names: Vec<String>,
 }
 
+/// The parsed contents of the localized stage name table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StageName {
+    /// The stage name lists, keyed by map identifier.
     pub entries: HashMap<u32, StageNameEntry>,
 }
 
 impl StageName {
+    /// Parses the localized stage name table into per-map name lists.
+    ///
+    /// # Arguments
+    /// * `file_bytes` - The raw, decrypted byte slice of the stage name file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `StageName` on success, or a
+    /// `StageNameError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(file_bytes: B) -> Result<Self, StageNameError> {
         parse_inner(file_bytes.as_ref())
     }
@@ -83,12 +99,11 @@ fn parse_inner(file_bytes: &[u8]) -> Result<StageName, StageNameError> {
 
     let mut dummy_idx = None;
     for (idx, (_, names)) in parsed_lines.iter().enumerate() {
-        if let Some(first_name) = names.first() {
-            if is_dummy_string(first_name) {
+        if let Some(first_name) = names.first()
+            && is_dummy_string(first_name) {
                 dummy_idx = Some(idx);
                 break;
             }
-        }
     }
 
     let mut stage_entries = HashMap::new();

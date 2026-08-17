@@ -1,41 +1,74 @@
 use crate::common::tools::file;
 use crate::graphics::tools::math;
 
-#[derive(Clone, Debug)]
+use super::RigError;
+
+/// A single control point on an animation curve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Keyframe {
+    /// The frame at which this control point takes effect.
     pub frame: i32,
+    /// The raw value the curve holds at this control point, in the units of the modified property.
     pub value: i32,
+    /// The interpolation strategy applied between this control point and the next.
     pub ease_mode: i32,
+    /// The exponent applied by the easing strategies that accept one.
     pub ease_power: i32,
 }
 
-#[derive(Clone, Debug)]
+/// A single animated property of one model part over time.
+///
+/// Each modification drives exactly one property of one part, so a part that
+/// moves, rotates, and fades simultaneously is described by three separate
+/// modifications sharing a part identifier.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnimModification {
+    /// The index of the model part this modification drives.
     pub part_id: usize,
+    /// The identifier of the property being modified, such as position, scale, or opacity.
     pub modification_type: i32,
+    /// The repetition behavior of the curve, where a value of one plays it exactly once.
     pub loop_count: i32,
+    /// The control points defining the curve, in ascending frame order.
     pub keyframes: Vec<Keyframe>,
+    /// The first frame of the curve's declared active range.
     pub min_frame: i32,
+    /// The last frame of the curve's declared active range.
     pub max_frame: i32,
 }
 
-#[derive(Clone, Debug, Default)]
+/// A complete animation timeline for a unit's rig.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Animation {
+    /// The property curves that make up the animation.
     pub curves: Vec<AnimModification>,
+    /// The highest frame referenced by any curve, giving the timeline's nominal length.
     pub max_frame: i32,
 }
 
 impl Animation {
-    #[inline(always)]
-    pub fn parse(bytes: impl AsRef<[u8]>) -> Option<Self> {
+    /// Parses a `.maanim` byte stream into a structured animation timeline.
+    ///
+    /// The file declares a run of property curves, each introduced by a header
+    /// row and followed by its own keyframe count and keyframe rows. Curves that
+    /// resolve to no keyframes are discarded, and the timeline's nominal length
+    /// is taken from the highest keyframe encountered.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw bytes of the unit's `.maanim` file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `Animation` on success, or a `RigError`
+    /// if the file contained no readable lines.
+    pub fn parse(bytes: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(bytes.as_ref())
     }
 
-    fn parse_inner(bytes: &[u8]) -> Option<Self> {
+    fn parse_inner(bytes: &[u8]) -> Result<Self, RigError> {
         let content = file::scrub(bytes);
         let delimiter = file::detect_separator(&content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
-        if lines.is_empty() { return None; }
+        if lines.is_empty() { return Err(RigError::EmptyFile); }
 
         fn parse_num<T: std::str::FromStr + Default>(input_string: &str) -> T {
             input_string.trim().parse().unwrap_or_default()
@@ -100,9 +133,20 @@ impl Animation {
                 && last_keyframe.frame > max_len { max_len = last_keyframe.frame; }
         }
 
-        Some(Self { curves, max_frame: max_len })
+        Ok(Self { curves, max_frame: max_len })
     }
 
+    /// Calculates the frame count after which every looping curve realigns.
+    ///
+    /// The result is the least common multiple of the individual curve
+    /// durations, which is the shortest interval over which the whole timeline
+    /// repeats. An animation containing any curve that plays exactly once has no
+    /// such interval, and neither does one whose combined period is
+    /// implausibly long or falls short of the timeline's own declared length.
+    ///
+    /// # Returns
+    /// An `Option` containing the combined loop length in frames, or `None` if
+    /// the animation does not loop coherently.
     pub fn calculate_true_loop(&self) -> Option<i32> {
         let mut overall_lcm: i64 = 1;
         let mut found_looping_part = false;
@@ -140,17 +184,28 @@ impl Animation {
         Some(overall_lcm as i32)
     }
 
-    #[inline(always)]
-    pub fn scan_duration(bytes: impl AsRef<[u8]>) -> i32 {
+    /// Measures an animation's played length without building the full timeline.
+    ///
+    /// This walks the curve headers and keyframe bounds directly, accounting for
+    /// each curve's repetition count, and is substantially cheaper than
+    /// [`Animation::parse`] followed by inspection.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw bytes of the unit's `.maanim` file.
+    ///
+    /// # Returns
+    /// An `Option` containing the animation's length in frames, or `None` if the
+    /// file contained no readable lines.
+    pub fn scan_duration(bytes: impl AsRef<[u8]>) -> Option<i32> {
         Self::scan_duration_inner(bytes.as_ref())
     }
 
-    fn scan_duration_inner(bytes: &[u8]) -> i32 {
+    fn scan_duration_inner(bytes: &[u8]) -> Option<i32> {
         let content = file::scrub(bytes);
         let delimiter = file::detect_separator(&content);
 
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
-        if lines.is_empty() { return 0; }
+        if lines.is_empty() { return None; }
 
         let mut max_frame_count = 0;
         let mut line_idx = 0;
@@ -178,21 +233,17 @@ impl Animation {
             line_idx += 1;
 
             if keyframe_count > 0 {
-                let first_frame_line = lines[line_idx];
+                let Some(first_frame_line) = lines.get(line_idx) else { break; };
                 let first_frame: i32 = first_frame_line.split(delimiter)
                     .next()
                     .and_then(|s| s.trim().parse().ok())
                     .unwrap_or_default();
 
                 let last_idx = line_idx + keyframe_count - 1;
-                let last_frame: i32 = if last_idx < lines.len() {
-                    lines[last_idx].split(delimiter)
-                        .next()
-                        .and_then(|s| s.trim().parse().ok())
-                        .unwrap_or_default()
-                } else {
-                    0
-                };
+                let last_frame: i32 = lines.get(last_idx)
+                    .and_then(|line| line.split(delimiter).next())
+                    .and_then(|s| s.trim().parse().ok())
+                    .unwrap_or_default();
 
                 let duration = last_frame - first_frame;
                 max_frame_count = std::cmp::max((duration * repeats) + first_frame, max_frame_count);
@@ -201,6 +252,6 @@ impl Animation {
             }
         }
 
-        max_frame_count
+        Some(max_frame_count)
     }
 }

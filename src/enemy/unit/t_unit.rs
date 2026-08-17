@@ -1,14 +1,45 @@
+//! Parsing of the shared enemy combat statistic table.
+//!
+//! The engine stores every enemy's statistics in a single `t_unit.csv` table
+//! carrying two header lines, with one row per enemy in identifier order.
+
 use std::cell::Cell;
 
 use crate::combat::{Entity, EntityError, Faction, entity};
 
 const HEADER_LINES: usize = 2;
 
+/// Parses the shared enemy statistic table into one entity per declared enemy.
+///
+/// The table carries two leading header lines, which are skipped before the
+/// remaining rows are read in file order. The position of an entity within the
+/// returned vector is its internal enemy identifier.
+///
+/// # Arguments
+/// * `bytes` - The raw, decrypted byte slice of the `t_unit.csv` file.
+///
+/// # Returns
+/// A `Result` containing the parsed entities indexed by enemy identifier on
+/// success, or an `EntityError` if the file contained no rows wide enough to
+/// be interpreted as combat data.
 pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
     entity::parse_rows(bytes.as_ref(), HEADER_LINES, from_row)
 }
 
-pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Result<Option<Entity>, EntityError> {
+/// Parses a single row of the shared enemy statistic table by enemy identifier.
+///
+/// This avoids materializing the entire table when only one enemy is required.
+/// The two leading header lines are skipped before the identifier is applied as
+/// a row offset.
+///
+/// # Arguments
+/// * `bytes` - The raw, decrypted byte slice of the `t_unit.csv` file.
+/// * `id` - The internal enemy identifier, used as a zero-based row offset past the header.
+///
+/// # Returns
+/// An `Option` containing the parsed entity, or `None` if the identifier lies
+/// beyond the end of the table or addresses a row too narrow to be combat data.
+pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Entity> {
     entity::parse_single(bytes.as_ref(), HEADER_LINES, id, from_row)
 }
 

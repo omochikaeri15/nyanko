@@ -1,3 +1,8 @@
+//! Static lookup tables and shared data files.
+//!
+//! These modules cover values the engine addresses by index or key rather than
+//! storing inline, such as icon atlas positions and localized string tables.
+
 mod param;
 mod localizable;
 

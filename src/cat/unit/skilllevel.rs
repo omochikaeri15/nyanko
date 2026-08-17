@@ -3,8 +3,11 @@ use std::fmt;
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of talent cost curves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SkillLevelError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -18,18 +21,30 @@ impl fmt::Display for SkillLevelError {
 
 impl std::error::Error for SkillLevelError {}
 
-/// Represents the incremental resource requirements for upgrading a talent.
+/// The cost of each successive level of a talent.
 ///
-/// This structure defines the step-by-step cost curve mapped to a specific
-/// cost identifier. Each element in the sequence dictates the exact resource
-/// expenditure required to advance the talent to the corresponding next level.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// One curve per cost identifier; each element is the cost of advancing to the
+/// next level.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TalentCost {
     /// The sequence of resource costs per level progression.
     pub costs: Vec<u16>,
 }
 
 impl TalentCost {
+    /// Parses the talent cost table into curves keyed by cost identifier.
+    ///
+    /// Each row is addressed by its leading column rather than by its position,
+    /// because talent groups reference these curves through the cost identifier
+    /// recorded on the group. Rows whose leading column is not a valid
+    /// identifier are skipped, which discards any header the file carries.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the `SkillLevel.csv` file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed curves keyed by cost identifier on
+    /// success, or a `SkillLevelError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u8, Self>, SkillLevelError> {
         parse_inner(bytes.as_ref())
     }

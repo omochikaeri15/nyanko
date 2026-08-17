@@ -4,7 +4,8 @@
 mod example {
     use std::fs;
     use std::path::Path;
-    use nyanko::graphics::actor::{Unit, Animation, resolve_frame};
+    use nyanko::graphics::engine::resolve_frame;
+    use nyanko::graphics::rig::{Animation, Rig};
 
     pub fn run() {
         println!("Nyanko Graphics Pipeline Example\n");
@@ -29,10 +30,10 @@ mod example {
         let imgcut_bytes = fs::read(imgcut_path).unwrap();
         let mamodel_bytes = fs::read(mamodel_path).unwrap();
 
-        let unit = Unit::parse(&png_bytes, &imgcut_bytes, &mamodel_bytes)
+        let rig = Rig::parse(&png_bytes, &imgcut_bytes, &mamodel_bytes)
             .expect("Failed to parse unit hierarchy or texture atlas");
 
-        println!("Successfully built Unit containing {} structural parts.", unit.model.parts.len());
+        println!("Successfully built Rig containing {} structural parts.", rig.model.parts.len());
 
         // ==========================================
         // 2. Loading the Animation Timeline
@@ -50,7 +51,7 @@ mod example {
 
         // Simulating the pipeline at exactly frame 5.0
         let target_frame = 5.0;
-        let gpu_payload = resolve_frame(&unit, Some(&animation), target_frame);
+        let gpu_payload = resolve_frame(&rig, Some(&animation), target_frame);
 
         println!("GPU Draw Calls for Frame {}:", target_frame);
         for data in gpu_payload {

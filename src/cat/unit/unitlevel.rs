@@ -1,9 +1,13 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of level growth curves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LevelError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -17,13 +21,11 @@ impl fmt::Display for LevelError {
 
 impl std::error::Error for LevelError {}
 
-/// Defines the mathematical growth trajectory for an entity's statistics.
+/// The growth trajectory of an entity's statistics.
 ///
-/// This structure stores the sequence of percentage-based scaling increments
-/// representing discrete growth brackets. It provides the pure fixed-point
-/// algorithm required to accurately project an entity's statistical values
-/// at any given level index.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+/// Holds the percentage scaling increments for each ten-level bracket, and the
+/// arithmetic to project a statistic to any level.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LevelCurve {
     /// The sequence of scaling factors, where each index maps to a 10-level progression bracket.
     pub increments: Vec<u16>,
@@ -31,17 +33,28 @@ pub struct LevelCurve {
 
 impl LevelCurve {
     fn from_csv_line(csv_line: &str, delimiter: char) -> Self {
-        let line_parts: Vec<&str> = csv_line.split(delimiter).collect();
-        let mut increment_values = Vec::new();
-        for part in line_parts {
-            if let Ok(value) = part.trim().parse::<u16>() {
-                increment_values.push(value);
-            }
-        }
+        let increment_values = csv_line
+            .split(delimiter)
+            .filter_map(|part| part.trim().parse::<u16>().ok())
+            .collect();
+
         Self { increments: increment_values }
     }
 
-    /// Pure, platform-agnostic leveling math.
+    /// Projects a base statistic forward to the value it holds at a given level.
+    ///
+    /// Growth is applied one level at a time, drawing the scaling factor for
+    /// each step from the ten-level bracket that step falls into. Levels beyond
+    /// the last declared bracket continue to accrue at the final bracket's rate.
+    /// The result is scaled by the engine's fixed display multiplier, so it is
+    /// directly comparable to the values the game presents.
+    ///
+    /// # Arguments
+    /// * `base_value` - The unscaled statistic as declared in the unit's combat row.
+    /// * `target_level` - The one-based level to project the statistic to.
+    ///
+    /// # Returns
+    /// An `i32` containing the projected statistic at the requested level.
     pub fn calculate_stat(&self, base_value: i32, target_level: i32) -> i32 {
         let base_float = base_value as f64;
         let mut current_stat = base_float;
@@ -67,25 +80,36 @@ impl LevelCurve {
         final_stat as i32
     }
 
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Self>, LevelError> {
+    /// Parses the level growth table into curves keyed by unit identifier.
+    ///
+    /// A line's position in the file is that unit's identifier, which blank
+    /// lines do not disturb.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the `unitlevel.csv` file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed curves keyed by unit identifier on
+    /// success, or a `LevelError` if the file contained no parseable rows.
+    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u32, Self>, LevelError> {
         parse_inner(bytes.as_ref())
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<Vec<LevelCurve>, LevelError> {
+fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, LevelCurve>, LevelError> {
     let file_content = file::scrub(bytes);
     let delimiter = file::detect_separator(&file_content);
 
-    let mut curves_list = Vec::new();
+    let mut curves = HashMap::new();
 
-    for csv_line in file_content.lines() {
+    for (line_index, csv_line) in file_content.lines().enumerate() {
         if csv_line.trim().is_empty() { continue; }
-        curves_list.push(LevelCurve::from_csv_line(csv_line, delimiter));
+        curves.insert(line_index as u32, LevelCurve::from_csv_line(csv_line, delimiter));
     }
 
-    if curves_list.is_empty() {
+    if curves.is_empty() {
         return Err(LevelError::EmptyFile);
     }
 
-    Ok(curves_list)
+    Ok(curves)
 }

@@ -1,3 +1,18 @@
+//! Comparison of resolved poses, used to detect when an animation repeats.
+
+/// Measures how far two resolved poses differ.
+///
+/// Translation, rotation, scale, and opacity are weighted to contribute
+/// comparably despite differing units, so one scalar threshold can decide
+/// whether two frames are visually identical.
+///
+/// # Arguments
+/// * `current_state` - The transform matrix and opacity of each part in the first pose.
+/// * `past_state` - The same values for the pose being compared against.
+///
+/// # Returns
+/// An `f32` containing the accumulated difference, zero for identical poses.
+/// Parts beyond the shorter input are ignored.
 pub fn calculate_difference(
     current_state: &[([f32; 9], f32)],
     past_state: &[([f32; 9], f32)],

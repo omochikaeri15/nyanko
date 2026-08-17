@@ -1,10 +1,9 @@
 use crate::common::tools::file;
 
-/// Represents the baseline geometric and hierarchical state of a singular skeletal component.
-///
-/// Defines initial affine transformations, structural pivot points, and drawing order assignments
-/// for a model part before timeline-based animation modifications are calculated.
-#[derive(Clone, Debug)]
+use super::RigError;
+
+/// One model part in its rest pose, before any animation is applied.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelPart {
     /// The index of the structural parent governing this part's hierarchical inheritance.
     pub parent_id: i32,
@@ -63,17 +62,16 @@ impl Default for ModelPart {
     }
 }
 
-/// The root hierarchical skeletal structure of a graphical entity.
+/// A unit's part hierarchy in its rest pose.
 ///
-/// This structure encapsulates the localized `ModelPart` components and defines the global
-/// arithmetic divisors required to decode spatial, rotational, and opacity transformations
-/// from their integer storage format into standard floating-point space.
-#[derive(Clone, Debug)]
+/// Transforms are stored as integers; the unit divisors convert them to the
+/// floating-point values the engine actually applies.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Model {
     /// The ordered collection of individual skeletal components dictating the model's geometry.
     pub parts: Vec<ModelPart>,
     /// The specification version of the parsed format.
-    #[allow(dead_code)] pub version: u32,
+    pub version: u32,
     /// The global denominator used to normalize raw scale values.
     pub scale_unit: f32,
     /// The global denominator used to normalize raw rotational values into degrees.
@@ -96,23 +94,28 @@ impl Default for Model {
 impl Model {
     /// Parses a `.mamodel` byte stream into a structured `Model` hierarchy.
     ///
+    /// The file opens with a short preamble declaring how many parts follow,
+    /// after which each part occupies one row. A trailing metadata block, when
+    /// present, supplies the normalization divisors and the root part's origin
+    /// offset; its absence leaves the engine defaults in place.
+    ///
     /// # Arguments
     /// * `bytes` - The raw byte data of the `.mamodel` file.
     ///
     /// # Returns
-    /// Returns `Some(Model)` if the structure is successfully parsed, or `None` if the input is malformed.
-    #[inline(always)]
-    pub fn parse(bytes: impl AsRef<[u8]>) -> Option<Self> {
+    /// A `Result` containing the parsed `Model` on success, or a `RigError` if
+    /// the file was empty or declared no usable part count.
+    pub fn parse(bytes: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(bytes.as_ref())
     }
 
-    fn parse_inner(bytes: &[u8]) -> Option<Self> {
+    fn parse_inner(bytes: &[u8]) -> Result<Self, RigError> {
         let content = file::scrub(bytes);
         let delimiter = file::detect_separator(&content);
 
         let lines: Vec<&str> = content.lines().filter(|line_ref| !line_ref.trim().is_empty()).collect();
 
-        if lines.is_empty() { return None; }
+        if lines.is_empty() { return Err(RigError::EmptyFile); }
 
         let mut part_count = 0;
         let mut data_start_index = 0;
@@ -126,7 +129,7 @@ impl Model {
             data_start_index = index + 1;
         }
 
-        if part_count == 0 { return None; }
+        if part_count == 0 { return Err(RigError::NoPartHeader); }
 
         let unit_line_index = data_start_index + part_count;
         let mut scale_unit = 1000.0;
@@ -134,8 +137,8 @@ impl Model {
         let mut alpha_unit = 1000.0;
         let mut metadata_start_index = usize::MAX;
 
-        for index in unit_line_index..lines.len() {
-            let columns: Vec<&str> = lines[index].split(delimiter).collect();
+        for (index, line) in lines.iter().enumerate().skip(unit_line_index) {
+            let columns: Vec<&str> = line.split(delimiter).collect();
             if columns.len() < 3 { continue; }
 
             let Ok(scale_val) = columns[0].trim().parse::<f32>() else { continue; };
@@ -153,10 +156,9 @@ impl Model {
         let mut parts = Vec::new();
 
         for index in 0..part_count {
-            let target_line_idx = data_start_index + index;
-            if target_line_idx >= lines.len() { break; }
+            let Some(line) = lines.get(data_start_index + index) else { break; };
 
-            let columns: Vec<&str> = lines[target_line_idx].split(delimiter).collect();
+            let columns: Vec<&str> = line.split(delimiter).collect();
             if columns.len() < 13 { continue; }
 
             let is_root = parts.is_empty();
@@ -183,18 +185,19 @@ impl Model {
         }
 
         let _ = (|| -> Option<()> {
-            if parts.is_empty() { return None; }
+            let root = parts.first_mut()?;
             let metadata_count = lines.get(metadata_start_index)?.trim().parse::<usize>().ok()?;
             if metadata_count == 0 { return None; }
 
             let columns: Vec<&str> = lines.get(metadata_start_index + 1)?.split(delimiter).collect();
-            if columns.len() < 4 { return None; }
+            let origin_x = columns.get(2)?.trim().parse::<f32>().unwrap_or(0.0);
+            let origin_y = columns.get(3)?.trim().parse::<f32>().unwrap_or(0.0);
 
-            parts[0].position_x = -columns[2].trim().parse::<f32>().unwrap_or(0.0);
-            parts[0].position_y = -columns[3].trim().parse::<f32>().unwrap_or(0.0);
+            root.position_x = -origin_x;
+            root.position_y = -origin_y;
             Some(())
         })();
 
-        Some(Model { parts, version: 1, scale_unit, angle_unit, alpha_unit })
+        Ok(Model { parts, version: 1, scale_unit, angle_unit, alpha_unit })
     }
 }

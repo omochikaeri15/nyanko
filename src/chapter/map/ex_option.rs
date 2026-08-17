@@ -1,3 +1,4 @@
+//! Links from ordinary maps to the EX maps they can divert into.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of EX map links.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ExOptionError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,12 +27,25 @@ impl fmt::Display for ExOptionError {
 
 impl std::error::Error for ExOptionError {}
 
+/// The parsed contents of the EX map link table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExOption {
+    /// The identifier of the EX map each ordinary map can divert into, keyed by the ordinary map.
     pub map_to_ex_map: HashMap<u32, u32>,
 }
 
 impl ExOption {
+    /// Parses the EX map link table into a mapping between map identifiers.
+    ///
+    /// Trailing comment text introduced by a double slash is discarded before
+    /// the columns are read.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the EX option file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `ExOption` on success, or an
+    /// `ExOptionError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, ExOptionError> {
         parse_inner(bytes.as_ref())
     }

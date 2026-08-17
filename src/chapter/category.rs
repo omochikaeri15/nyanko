@@ -1,32 +1,64 @@
+//! Identification of the stage chapter a map belongs to.
+
 use serde::{Deserialize, Serialize};
 
+/// Identifies one of the game's stage chapters.
+///
+/// The engine encodes the chapter in a map's filename prefix, but addresses the
+/// same map numerically elsewhere. This sits between the two schemes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Category {
+    /// The Stories of Legend chapter.
     StoriesOfLegend,
+    /// The recurring event stage chapter.
     RegularEventStages,
+    /// The collaboration event chapter.
     CollabStages,
+    /// The Empire of Cats main story chapter.
     EmpireOfCats,
+    /// The Into the Future main story chapter.
     IntoTheFuture,
+    /// The Cats of the Cosmos main story chapter.
     CatsOfTheCosmos,
+    /// The limited-time event chapter.
     EventStages,
+    /// The continuation stages that extend the main story chapters.
     ContinuationStages,
+    /// The Catclaw Dojo Hall of Initiates chapter.
     DojoHallOfInitiates,
+    /// The Towers and Citadels chapter.
     TowersAndCitadels,
+    /// The ranked Catclaw Dojo event chapter.
     DojoRankingEvents,
+    /// The Challenge Battle chapter.
     ChallengeBattle,
+    /// The Uncanny Legends chapter.
     UncannyLegends,
+    /// The Catamin stage chapter.
     CataminStages,
+    /// The Legend Quest chapter.
     LegendQuest,
+    /// The Zombie Outbreak chapter overlaid on the main story maps.
     ZombieOutbreaks,
+    /// The Gauntlet chapter.
     GauntletStages,
+    /// The Enigma chapter.
     EnigmaStages,
+    /// The collaboration Gauntlet chapter.
     CollabGauntletStages,
+    /// The Aku Realms chapter.
     AkuRealms,
+    /// The Behemoth Culling chapter.
     BehemothCulling,
+    /// The Labyrinth chapter.
     Labyrinth,
+    /// The Zero Legends chapter.
     ZeroLegends,
+    /// The Otherworld Colosseum chapter.
     OtherworldColosseum,
+    /// The Catclaw Championships chapter.
     CatclawChampionships,
+    /// A chapter prefix this parser does not recognize, carrying the raw prefix.
     Unknown(String),
 }
 
@@ -37,6 +69,11 @@ impl Default for Category {
 }
 
 impl Category {
+    /// Returns the filename prefix the engine uses for this chapter's map files.
+    ///
+    /// # Returns
+    /// A `String` containing the prefix, which is empty for chapters whose files
+    /// carry no prefix at all.
     pub fn map_prefix(&self) -> String {
         match self {
             Self::StoriesOfLegend      => "N".to_string(),
@@ -68,10 +105,24 @@ impl Category {
         }
     }
 
+    /// Returns the filename prefix the engine uses for this chapter's artwork.
+    ///
+    /// Several chapters share their artwork with the chapter they extend, so
+    /// this does not always agree with [`Category::map_prefix`].
+    ///
+    /// # Returns
+    /// A `String` containing the artwork prefix.
     pub fn image_prefix(&self) -> String {
         self.map_prefix().to_lowercase()
     }
 
+    /// Returns every filename prefix this chapter's stage files may carry.
+    ///
+    /// Stage prefixes do not always match a chapter's map prefix, and some
+    /// chapters accept an extra prefix for restricted variants.
+    ///
+    /// # Returns
+    /// A `Vec<String>` containing the candidate prefixes, most specific first.
     pub fn stage_prefix(&self) -> Vec<String> {
         let base = self.map_prefix();
         let mut prefixes = vec![base.clone()];
@@ -107,6 +158,18 @@ impl Category {
         prefixes
     }
 
+    /// Resolves a chapter from the filename prefix its files carry.
+    ///
+    /// Matching is case-insensitive and accepts the restricted-variant prefixes
+    /// the engine uses alongside the ordinary ones. The empty prefix resolves to
+    /// the first main story chapter, whose files carry none.
+    ///
+    /// # Arguments
+    /// * `prefix` - The filename prefix to resolve.
+    ///
+    /// # Returns
+    /// The matching `Category`, or `Category::Unknown` carrying the supplied
+    /// prefix when it matches no known chapter.
     pub fn from_prefix(prefix: &str) -> Self {
         match prefix.to_uppercase().as_str() {
             "N"     | "RN"  => Self::StoriesOfLegend,
@@ -138,6 +201,12 @@ impl Category {
         }
     }
 
+    /// Returns the numeric base this chapter's map identifiers are offset from.
+    ///
+    /// # Returns
+    /// An `Option` containing the chapter's base, or `None` for the main story
+    /// chapters and unrecognized chapters, which are not addressed through this
+    /// scheme.
     pub fn base_id(&self) -> Option<u32> {
         match self {
             Self::StoriesOfLegend      => Some(0),
@@ -169,6 +238,17 @@ impl Category {
         }
     }
 
+    /// Converts a map's chapter-local identifier into its global identifier.
+    ///
+    /// Cross-chapter tables combine the chapter's base with the map's own number,
+    /// whereas a chapter's own files number its maps from zero.
+    ///
+    /// # Arguments
+    /// * `local_map_id` - The map's number within this chapter.
+    ///
+    /// # Returns
+    /// An `Option` containing the global identifier, or `None` when the chapter
+    /// is not addressed through this scheme.
     pub fn global_map_id(&self, local_map_id: u32) -> Option<u32> {
         self.base_id().map(|base| (base * 1000) + local_map_id)
     }

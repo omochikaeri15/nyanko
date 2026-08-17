@@ -1,3 +1,4 @@
+//! Unit lineup restrictions applied by particular stages.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of unit restriction groups.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CharaGroupError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,10 +27,14 @@ impl fmt::Display for CharaGroupError {
 
 impl std::error::Error for CharaGroupError {}
 
+/// Selects how a unit restriction group constrains the player's lineup.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CharaGroupType {
+    /// Only the listed units may be fielded.
     OnlyUse,
+    /// The listed units are barred, and all others may be fielded.
     CannotUse,
+    /// A restriction code this parser does not recognize, carrying its raw value.
     Unknown(u32),
 }
 
@@ -40,19 +48,33 @@ impl From<u32> for CharaGroupType {
     }
 }
 
+/// A single unit restriction group.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CharaGroupEntry {
+    /// The group's own identifier, referenced by the stages that apply it.
     pub id: u32,
+    /// How the listed units constrain the player's lineup.
     pub kind: CharaGroupType,
+    /// The identifiers of the units the restriction lists.
     pub units: Vec<u32>,
 }
 
+/// The parsed contents of the unit restriction group table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CharaGroup {
+    /// The restriction groups, keyed by group identifier.
     pub groups: HashMap<u32, CharaGroupEntry>,
 }
 
 impl CharaGroup {
+    /// Parses the unit restriction group table into groups keyed by identifier.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the character group file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `CharaGroup` on success, or a
+    /// `CharaGroupError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, CharaGroupError> {
         parse_inner(bytes.as_ref())
     }
@@ -88,7 +110,7 @@ fn parse_inner(bytes: &[u8]) -> Result<CharaGroup, CharaGroupError> {
         let Ok(id) = id_str.trim().parse::<u32>() else { continue; };
 
         let Some(kind_str) = parts.get(2) else { continue; };
-        let parsed_kind = kind_str.trim().parse::<u32>().unwrap_or_else(|_| 0);
+        let parsed_kind = kind_str.trim().parse::<u32>().unwrap_or(0);
 
         let mut units = Vec::new();
         for unit_str in parts.iter().skip(3) {

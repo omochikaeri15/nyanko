@@ -1,27 +1,45 @@
+//! Measurement of the screen area a rig occupies across its animations.
+
 use crate::graphics::rig::SpriteSheet;
 use crate::graphics::rig::Animation;
 use crate::graphics::rig::Model;
 use crate::graphics::engine::timeline;
 use crate::graphics::engine::transform::{self, Vector};
 
-#[derive(Clone, Copy, Debug)]
+/// An axis-aligned rectangle enclosing a region of world space.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BoundingBox {
+    /// The leftmost extent.
     pub min_x: f32,
+    /// The topmost extent.
     pub min_y: f32,
+    /// The rightmost extent.
     pub max_x: f32,
+    /// The bottommost extent.
     pub max_y: f32,
 }
 
 impl BoundingBox {
+    /// Returns the horizontal extent of the rectangle.
+    ///
+    /// # Returns
+    /// An `f32` containing the distance between the left and right bounds.
     pub fn width(&self) -> f32 {
         self.max_x - self.min_x
     }
 
+    /// Returns the vertical extent of the rectangle.
+    ///
+    /// # Returns
+    /// An `f32` containing the distance between the top and bottom bounds.
     pub fn height(&self) -> f32 {
         self.max_y - self.min_y
     }
 
-    #[allow(dead_code)]
+    /// Returns the midpoint of the rectangle.
+    ///
+    /// # Returns
+    /// A `Vector` positioned at the center of the enclosed region.
     pub fn center(&self) -> Vector {
         Vector {
             x: (self.min_x + self.max_x) / 2.0,
@@ -29,6 +47,13 @@ impl BoundingBox {
         }
     }
 
+    /// Returns the smallest rectangle enclosing both this rectangle and another.
+    ///
+    /// # Arguments
+    /// * `other` - The rectangle to combine with this one.
+    ///
+    /// # Returns
+    /// A `BoundingBox` enclosing the full extent of both inputs.
     pub fn union(&self, other: &BoundingBox) -> BoundingBox {
         BoundingBox {
             min_x: self.min_x.min(other.min_x),
@@ -39,18 +64,40 @@ impl BoundingBox {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+/// The thresholds deciding which parts count towards a measured bounding box.
+///
+/// The engine's assets contain parts that are present but visually irrelevant,
+/// such as transparent markers or parts scaled off-screen. Each threshold
+/// excludes one such case.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tolerance {
+    /// The opacity below which an ordinary part is treated as invisible.
     pub minimum_opacity: f32,
+    /// The opacity below which an additively blended part is treated as invisible.
     pub minimum_glow_opacity: f32,
+    /// The scale factor above which a part is treated as a degenerate outlier.
     pub maximum_scale: f32,
+    /// The opacity below which a heavily scaled part is discarded rather than measured.
     pub scale_opacity_threshold: f32,
+    /// The ratio of vertical to horizontal scale above which a part is treated as degenerate.
     pub maximum_vertical_stretch: f32,
+    /// The rendered height above which a part is treated as a degenerate outlier.
     pub maximum_height_threshold: f32,
+    /// The vertical position below which a part is considered off-screen.
     pub minimum_y_bound: f32,
 }
 
 impl Tolerance {
+    /// Derives a full threshold set from a single strictness level.
+    ///
+    /// Zero admits nearly everything; one discards parts that are only
+    /// marginally visible.
+    ///
+    /// # Arguments
+    /// * `level` - The strictness from zero to one, which is clamped into that range.
+    ///
+    /// # Returns
+    /// A `Tolerance` populated with thresholds matching the requested level.
     pub fn new(level: f32) -> Self {
         let clamped_level = level.clamp(0.0, 1.0);
         let inverse_level = 1.0 - clamped_level;
@@ -67,6 +114,19 @@ impl Tolerance {
     }
 }
 
+/// Measures the combined bounding box of a model across several animations.
+///
+/// Each animation is scanned independently and the results combined.
+///
+/// # Arguments
+/// * `model` - The rest-pose hierarchy to measure.
+/// * `sheet` - The atlas supplying the sprite dimensions each part draws at.
+/// * `animations` - The animations to sweep.
+/// * `tolerance` - The thresholds deciding which parts count towards the result.
+///
+/// # Returns
+/// An `Option` containing the combined `BoundingBox`, or `None` if no animation
+/// produced a single measurable frame.
 pub fn calculate_animation_bounds(
     model: &Model,
     sheet: &SpriteSheet,
@@ -91,6 +151,21 @@ pub fn calculate_animation_bounds(
     master_bounds
 }
 
+/// Measures the bounding box of a model across one animation's frame range.
+///
+/// Every frame in the range is posed and its visible parts accumulated; parts
+/// the tolerance rejects are excluded.
+///
+/// # Arguments
+/// * `model` - The rest-pose hierarchy to measure.
+/// * `animation` - The animation to sweep, or `None` to measure the rest pose alone.
+/// * `sheet` - The atlas supplying the sprite dimensions each part draws at.
+/// * `tolerance` - The thresholds deciding which parts count towards the result.
+/// * `override_range` - An explicit inclusive frame range to scan, replacing the animation's own declared length.
+///
+/// # Returns
+/// An `Option` containing the measured `BoundingBox`, or `None` if no part was
+/// visible in any scanned frame.
 pub fn scan_bounds(
     model: &Model,
     animation: Option<&Animation>,

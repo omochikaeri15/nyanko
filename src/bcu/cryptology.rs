@@ -1,3 +1,5 @@
+//! AES decryption and manifest parsing for Battle Cats Ultimate archives.
+
 mod ciphers;
 mod parser;
 
@@ -8,17 +10,21 @@ use serde::Deserialize;
 
 const HEAD_DATA: &[u8] = b"battlecatsultimate";
 
-/// Represents cryptographic and parsing errors encountered when processing BCU packs.
-///
-/// This enum covers various failure states that can occur during the validation,
-/// decryption, and parsing phases of extracting data from a Battle Cats Ultimate pack.
+/// Represents errors encountered while processing a BCU archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
+    /// The archive did not open with the expected signature.
     InvalidHeader,
+    /// The archive was truncated before a declared field could be read.
     InvalidLength,
+    /// The supplied key was not exactly 16 bytes.
     InvalidKeyLength,
+    /// AES decryption failed.
     DecryptionFailed,
+    /// The decrypted data did not carry valid block padding.
     PaddingError,
+    /// The decrypted manifest was not valid JSON.
     InvalidJson,
 }
 
@@ -37,40 +43,37 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-/// Represents metadata for a single file contained within a BCU pack.
-///
-/// This structure is mapped directly from the decrypted JSON manifest embedded
-/// inside the BCU pack, detailing the expected internal path and exact byte size of the file.
-#[derive(Deserialize)]
+/// Metadata for one file inside a BCU archive, read from its JSON manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct FileDescriptor {
+    /// The file's virtual path inside the archive.
     pub path: String,
+    /// The file's unpadded length in bytes, used to trim the decrypted chunk.
     pub size: usize,
 }
 
-/// Represents the JSON manifest structure of a BCU pack.
-///
-/// Contains a sequential list of file descriptors that map out the boundaries
-/// and original sizes of the encrypted data chunks that immediately follow the manifest.
-#[derive(Deserialize)]
+/// A BCU archive's JSON manifest, mapping the chunks that follow it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PackDescriptor {
+    /// The descriptors of the contained files, in the order their chunks follow the manifest.
     pub files: Vec<FileDescriptor>,
 }
 
-/// Represents a fully decrypted and extracted file from a BCU pack.
-///
-/// Holds the internal virtual file path and the raw, unpadded byte data
-/// of the extracted file, ready for processing or saving to disk.
+/// One decrypted file extracted from a BCU archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedFile {
+    /// The file's virtual path inside the archive.
     pub path: String,
+    /// The file's decrypted contents, trimmed to its declared length.
     pub data: Vec<u8>,
 }
 
-/// Represents a fully decrypted BCU pack.
-///
-/// This structure acts as the container for the parsed pack metadata and all
-/// successfully extracted file contents held in memory.
+/// A fully decrypted BCU archive and its extracted contents.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pack {
+    /// The archive's manifest, describing every file it declares.
     pub metadata: PackDescriptor,
+    /// The decrypted contents of the files that were successfully extracted.
     pub files: Vec<ExtractedFile>,
 }
 

@@ -1,3 +1,4 @@
+//! Per-stage difficulty ratings shown in the stage selection interface.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of stage difficulty ratings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DifficultyLevelError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,12 +27,25 @@ impl fmt::Display for DifficultyLevelError {
 
 impl std::error::Error for DifficultyLevelError {}
 
+/// The parsed contents of the stage difficulty rating table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DifficultyLevel {
+    /// The per-stage difficulty ratings in stage order, keyed by map identifier.
     pub map_difficulties: HashMap<u32, Vec<u16>>,
 }
 
 impl DifficultyLevel {
+    /// Parses the stage difficulty rating table into per-map rating lists.
+    ///
+    /// Each row lists one map's ratings in stage order, so an entry's position
+    /// within the returned vector is its stage index.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the difficulty level file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `DifficultyLevel` on success, or a
+    /// `DifficultyLevelError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, DifficultyLevelError> {
         parse_inner(bytes.as_ref())
     }
@@ -72,7 +89,7 @@ fn parse_inner(bytes: &[u8]) -> Result<DifficultyLevel, DifficultyLevelError> {
                 integer_part = before_dot;
             }
 
-            let parsed_difficulty = integer_part.parse::<u16>().unwrap_or_else(|_| 0);
+            let parsed_difficulty = integer_part.parse::<u16>().unwrap_or(0);
 
             difficulties.push(parsed_difficulty);
         }

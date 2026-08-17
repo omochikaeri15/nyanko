@@ -1,3 +1,4 @@
+//! Rules barring the stage skip feature from particular maps.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of stage skip exclusions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LockSkipDataError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,19 +27,37 @@ impl fmt::Display for LockSkipDataError {
 
 impl std::error::Error for LockSkipDataError {}
 
+/// A single rule barring the stage skip feature from a map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LockSkipDataEntry {
+    /// The identifier of the message shown to explain why skipping is barred.
     pub exclusion_message_type: u32,
+    /// The identifier of the map the exclusion applies to.
     pub excluded_map_id: u32,
+    /// The trailing comment text accompanying the row in the source file.
     pub comment: String,
 }
 
+/// The parsed contents of the stage skip exclusion table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LockSkipData {
+    /// The exclusion rules, keyed by the excluded map identifier.
     pub entries: HashMap<u32, LockSkipDataEntry>,
 }
 
 impl LockSkipData {
+    /// Parses the stage skip exclusion table into per-map rules.
+    ///
+    /// Trailing comment text introduced by a double slash is retained on the
+    /// resulting entry rather than discarded, because the source file uses it to
+    /// record why each exclusion exists.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the lock skip data file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `LockSkipData` on success, or a
+    /// `LockSkipDataError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, LockSkipDataError> {
         parse_inner(bytes.as_ref())
     }
@@ -67,11 +89,10 @@ fn parse_inner(bytes: &[u8]) -> Result<LockSkipData, LockSkipDataError> {
         let parts: Vec<&str> = trimmed_data.split(separator_char).collect();
 
         let mut message_type = 0;
-        if let Some(message_type_str) = parts.first() {
-            if let Ok(parsed_type) = message_type_str.trim().parse::<u32>() {
+        if let Some(message_type_str) = parts.first()
+            && let Ok(parsed_type) = message_type_str.trim().parse::<u32>() {
                 message_type = parsed_type;
             }
-        }
 
         let Some(stage_id_str) = parts.get(1) else { continue; };
         let Ok(stage_id) = stage_id_str.trim().parse::<u32>() else { continue; };

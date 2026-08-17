@@ -2,8 +2,11 @@ use std::fmt;
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of unit explanation text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UnitExplanationError {
+    /// The supplied bytes yielded neither a name nor a description for any form.
     EmptyFile,
 }
 
@@ -17,13 +20,12 @@ impl fmt::Display for UnitExplanationError {
 
 impl std::error::Error for UnitExplanationError {}
 
-/// Represents the localized display names and dictionary descriptions for an entity.
+/// A unit's localized display names and dictionary descriptions.
 ///
-/// This structure maintains parallel fixed arrays mapping cleansed, multi-line string data
-/// to their corresponding form indices (0 = Normal, 1 = Evolved, 2 = True, 3 = Ultra).
-/// It automatically identifies and deduplicates identical sequential entries to optimize
-/// payload size. Missing or deduplicated forms are explicitly represented as `None`.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+/// Both arrays are indexed by form (0 = Normal, 1 = Evolved, 2 = True,
+/// 3 = Ultra). A form identical to the one before it is deduplicated to `None`,
+/// as is a form that does not exist.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnitExplanation {
     /// An array of parsed display names, indexed by form. `None` if the form does not exist or was deduplicated.
     pub names: [Option<String>; 4],

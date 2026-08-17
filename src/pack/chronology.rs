@@ -1,17 +1,18 @@
+//! Load-order weighting for pack files that overlay one another.
+
 use std::path::{Path, PathBuf};
 
-/// Calculates the chronological load weight of a pack file based on its filepath.
+/// Calculates a pack file's load-order weight from its path.
 ///
-/// The Battle Cats uses a specific naming convention to determine which files overwrite
-/// others in memory during extraction or loading. Higher calculated weights indicate
-/// that the file should be loaded last.
+/// The engine's naming convention decides which packs overwrite others once
+/// loaded. Sorting by this weight reproduces that order.
 ///
 /// # Arguments
-/// * `path` - The full Path object of the file being evaluated.
-/// * `temp_apk_dirs` - A list of temporary update/APK directories to boost score.
+/// * `path` - The path of the file being weighted.
+/// * `temp_apk_dirs` - Update directories whose contents take precedence.
 ///
 /// # Returns
-/// A `u64` representing the sorting weight. Higher values take precedence in memory overlays.
+/// A `u64` holding the sorting weight; higher values load last and win.
 pub fn calculate_weight(path: &Path, temp_apk_dirs: &[PathBuf]) -> u64 {
     let mut weight = 5_000;
     let mut found_version = false;

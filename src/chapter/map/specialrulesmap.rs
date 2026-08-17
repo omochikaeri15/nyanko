@@ -1,3 +1,4 @@
+//! Constraints that maps impose on how the player may fight them.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file::scrub;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of map special rules.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SpecialRulesMapError {
+    /// The supplied bytes were not valid JSON.
     InvalidJson,
 }
 
@@ -18,36 +22,72 @@ impl fmt::Display for SpecialRulesMapError {
 
 impl std::error::Error for SpecialRulesMapError {}
 
+/// A constraint a map imposes on how the player may fight it.
+///
+/// Each variant carries the rule's parameters as declared in the source
+/// document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RuleType {
+    /// The player begins the stage with a fixed starting budget.
     TrustFund(Vec<u32>),
+    /// Every unit is forced to share the same redeployment delay.
     CooldownEquality(Vec<u32>),
+    /// Only units at or below a given rarity may be fielded.
     RarityLimit(Vec<u32>),
+    /// Unit deployment costs are reduced.
     CheapLabor(Vec<u32>),
+    /// Unit deployment costs are overridden to a fixed value.
     CatCost(Vec<u32>),
+    /// The rate at which the budget accumulates is altered.
     CatProduction(Vec<u32>),
+    /// The total number of units deployable over the stage is capped.
     TotalDeployLimit(Vec<u32>),
+    /// Each unit must be deployed more than once to take effect.
     MoreThanOne(Vec<u32>),
+    /// The base cannon is replaced with its mega variant.
     MegaCatCannon(Vec<u32>),
+    /// Every unit is forced to share the same movement speed.
     UniformMotion(Vec<u32>),
+    /// Each deployment raises the cost of the next.
     CompoundingCost(Vec<u32>),
+    /// A rule code this parser does not recognize, carrying its raw code and parameters.
     Unknown(u8, Vec<u32>),
 }
 
+/// The special rule configuration for a single map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpecialRulesMapEntry {
+    /// The identifier of the rule set's presentation category.
     pub contents_type: u8,
+    /// The constraints this map imposes.
     pub rules: Vec<RuleType>,
+    /// The localization key for the rule set's display name.
     pub name_label: String,
+    /// The localization key for the rule set's explanatory text.
     pub explanation_label: String,
 }
 
+/// The parsed contents of the map special rule table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpecialRulesMap {
+    /// The rule configurations, keyed by map identifier.
     pub entries: HashMap<u32, SpecialRulesMapEntry>,
 }
 
 impl SpecialRulesMap {
+    /// Parses the map special rule document into per-map constraints.
+    ///
+    /// Unlike most engine tables this source is JSON rather than delimited text,
+    /// so the bytes are sanitized into UTF-8 before being decoded. Rule codes the
+    /// parser does not recognize are retained as `RuleType::Unknown` rather than
+    /// discarded.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the special rules JSON document.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `SpecialRulesMap` on success, or a
+    /// `SpecialRulesMapError` if the bytes were not valid JSON.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SpecialRulesMapError> {
         let clean = scrub(bytes.as_ref());
         parse_inner(&clean)

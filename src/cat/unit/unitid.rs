@@ -1,7 +1,25 @@
+//! Parsing of a Cat unit's per-form combat statistics.
+//!
+//! The engine stores these in a `unit<id>.csv` file alongside the unit's other
+//! assets, with one row per evolutionary form and no header.
+
 use std::cell::Cell;
 
 use crate::combat::{Entity, EntityError, Faction, entity};
 
+/// Parses a per-unit Cat statistic file into one entity per evolutionary form.
+///
+/// The file carries no header, and each row describes one form in ascending
+/// order beginning with the normal form. Units with fewer than four forms
+/// declare correspondingly fewer rows.
+///
+/// # Arguments
+/// * `bytes` - The raw, decrypted byte slice of a unit's `unit<id>.csv` file.
+///
+/// # Returns
+/// A `Result` containing the parsed entities in form order on success, or an
+/// `EntityError` if the file contained no rows wide enough to be interpreted
+/// as combat data.
 pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
     entity::parse_rows(bytes.as_ref(), 0, from_row)
 }

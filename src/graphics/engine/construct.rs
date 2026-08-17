@@ -1,8 +1,23 @@
+//! Conversion of resolved world transforms into renderer-ready geometry.
+
 use crate::graphics::engine::FrameData;
 use crate::graphics::rig::SpriteSheet;
 
 use super::transform::WorldTransform;
 
+/// Converts resolved world transforms into per-part drawable geometry.
+///
+/// Each part becomes the two triangles covering its sprite region, with texture
+/// coordinates from the atlas. Hidden, transparent, and unresolvable parts are
+/// omitted.
+///
+/// # Arguments
+/// * `parts` - The world transforms to expand, in draw order.
+/// * `sheet` - The atlas supplying the sprite regions the parts index into.
+///
+/// # Returns
+/// A `Vec<FrameData>` containing one entry per visible part, preserving the
+/// draw order of the input.
 pub fn build_geometry(
     parts: &[WorldTransform],
     sheet: &SpriteSheet,

@@ -4,7 +4,8 @@ use std::fmt;
 use crate::common::tools::file;
 
 /// Represents an error encountered during the localization dictionary build phase.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LocalizableError {
     /// Indicates that the provided byte payload yielded no actionable string pairs.
     EmptyFile,
@@ -20,26 +21,26 @@ impl fmt::Display for LocalizableError {
 
 impl std::error::Error for LocalizableError {}
 
-/// Provides an optimized, zero-allocation dictionary for translating internal engine keys
-/// into user-facing localized text.
+/// A dictionary translating internal engine keys into localized text.
 #[derive(Debug, Clone, Default)]
 pub struct Localizable {
     map: HashMap<String, String>,
 }
 
 impl Localizable {
-    /// Parses raw TSV byte data into an indexed dictionary.
+    /// Parses a tab-separated localization table into a dictionary.
     ///
     /// # Arguments
-    /// * `bytes` - A polymorphic byte slice reference representing the localization payload.
+    /// * `bytes` - The raw, decrypted byte slice of the localization file.
     ///
     /// # Returns
-    /// A populated `Localizable` instance, or a `LocalizableError` if the payload is empty.
+    /// A `Result` containing the populated `Localizable` on success, or a
+    /// `LocalizableError` if the payload held no usable pairs.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, LocalizableError> {
         parse_inner(bytes.as_ref())
     }
 
-    /// Executes a zero-allocation query against the internal localization dictionary.
+    /// Looks up the localized text for an engine key.
     ///
     /// # Arguments
     /// * `key` - The string identifier to locate within the dictionary.

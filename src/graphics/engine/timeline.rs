@@ -1,11 +1,45 @@
-use crate::graphics::rig::{Animation, AnimModification};
+//! Evaluation of animation curves onto a model's parts.
+
+use std::error;
+use std::fmt;
+
+use crate::graphics::rig::{AnimModification, Animation};
 use crate::graphics::rig::{Model, ModelPart};
 
-#[derive(Debug)]
+/// Represents errors that can occur while applying an animation to a model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TimelineError {
+    /// The supplied state buffer did not have one slot per model part.
     BufferMismatch,
 }
 
+impl fmt::Display for TimelineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BufferMismatch => write!(f, "The state buffer length does not match the model's part count."),
+        }
+    }
+}
+
+impl error::Error for TimelineError {}
+
+/// Applies an animation to a model at a given frame, writing into a reusable buffer.
+///
+/// The buffer is reset to the rest pose first, so the result depends only on the
+/// requested frame. Curves apply relative to that pose rather than cumulatively,
+/// which is why the model is needed alongside the buffer. Passing the buffer in
+/// lets a caller animating many frames allocate once rather than per frame.
+///
+/// # Arguments
+/// * `model` - The rest-pose hierarchy the animation modifies.
+/// * `animation` - The timeline supplying the property curves to evaluate.
+/// * `global_frame` - The frame to evaluate at, which may be fractional to sample between keyframes.
+/// * `state_buffer` - The destination for the resolved pose, which must have exactly one slot per model part.
+///
+/// # Returns
+/// A `Result` containing the unit value on success, or a `TimelineError` if the
+/// buffer length does not match the model's part count.
 pub fn animate(model: &Model, animation: &Animation, global_frame: f32, state_buffer: &mut [ModelPart]) -> Result<(), TimelineError> {
     if state_buffer.len() != model.parts.len() {
         return Err(TimelineError::BufferMismatch);
@@ -84,7 +118,7 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
     }
 
     if !is_found {
-        let Some(last_keyframe) = curve.keyframes.last() else { return None; };
+        let last_keyframe = curve.keyframes.last()?;
         return Some((last_keyframe.value as f32).trunc());
     }
 
@@ -120,16 +154,13 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
         }
 
         let mut final_result: i64 = 0;
-        let total_points = points.len();
         let frame_int = frame.floor() as i64;
 
-        for outer_index in 0..total_points {
-            let (frame_j, val_j) = points[outer_index];
+        for (outer_index, &(frame_j, val_j)) in points.iter().enumerate() {
             let mut lagrange_term = val_j << 12;
 
-            for inner_index in 0..total_points {
+            for (inner_index, &(frame_m, _)) in points.iter().enumerate() {
                 if outer_index == inner_index { continue; }
-                let (frame_m, _) = points[inner_index];
                 if frame_j - frame_m != 0 {
                     lagrange_term = lagrange_term * (frame_int - frame_m) / (frame_j - frame_m);
                 }
@@ -181,7 +212,7 @@ fn interpolate_curve(curve: &AnimModification, frame: f32, is_discrete: bool) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::data::maanim::{Keyframe, AnimModification};
+    use crate::graphics::rig::{AnimModification, Keyframe};
 
     #[test]
     fn test_linear_interpolation() {

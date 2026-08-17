@@ -1,20 +1,37 @@
+//! Resolution of a model's part hierarchy into absolute world transforms.
+
 use crate::graphics::rig::{Model, ModelPart};
 
-#[derive(Clone, Copy, Debug)]
+/// A two-dimensional point or offset in world space.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vector {
+    /// The horizontal component.
     pub x: f32,
+    /// The vertical component.
     pub y: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
+/// One model part resolved into absolute world space.
+///
+/// Each part's placement is relative to its parent, so producing this requires
+/// walking its full ancestry. Once resolved it can be drawn standalone.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WorldTransform {
+    /// The absolute transform as a row-major three-by-three affine matrix.
     pub matrix: [f32; 9],
+    /// The resolved opacity, from fully transparent at zero to fully opaque at one.
     pub opacity: f32,
+    /// The depth sorting key, where higher values draw in front.
     pub z_order: i32,
+    /// The index of the sprite region this part draws from the atlas.
     pub sprite_index: usize,
+    /// The rotation anchor in world space.
     pub pivot: Vector,
+    /// Whether the part is suppressed from rendering entirely.
     pub hidden: bool,
+    /// The additive blending mode, where zero is ordinary alpha blending.
     pub glow: u8,
+    /// The index of this part within the originating model, for correlating back to it.
     pub part_index: usize,
 }
 
@@ -53,6 +70,17 @@ impl Default for GlobalState {
     }
 }
 
+/// Resolves every part of a posed model into absolute world transforms.
+///
+/// Resolving a part composes the transforms of its entire ancestry. The result
+/// is sorted into draw order.
+///
+/// # Arguments
+/// * `parts` - The posed part states, typically the buffer written by `timeline::animate`.
+/// * `model` - The originating model, supplying the parent links and normalization divisors.
+///
+/// # Returns
+/// A `Vec<WorldTransform>` containing one entry per part, ordered back to front.
 pub fn solve_hierarchy(parts: &[ModelPart], model: &Model) -> Vec<WorldTransform> {
     let mut results = Vec::with_capacity(parts.len());
 
@@ -150,9 +178,9 @@ fn solve_single_part(target_index: usize, parts: &[ModelPart], model: &Model) ->
     let step_count = vector_steps.len();
     for apply_index in 0..step_count {
         let current_scale = vector_steps[apply_index].matrix_scale;
-        for modify_index in apply_index..step_count {
-            vector_steps[modify_index].position[0] *= current_scale[0];
-            vector_steps[modify_index].position[1] *= current_scale[1];
+        for step in vector_steps.iter_mut().skip(apply_index) {
+            step.position[0] *= current_scale[0];
+            step.position[1] *= current_scale[1];
         }
     }
 
@@ -167,14 +195,14 @@ fn solve_single_part(target_index: usize, parts: &[ModelPart], model: &Model) ->
 
     for apply_index in 0..step_count {
         let current_rotation_matrix = vector_steps[apply_index].matrix_rotation;
-        for modify_index in apply_index..step_count {
-            let x = vector_steps[modify_index].position[0];
-            let y = vector_steps[modify_index].position[1];
+        for step in vector_steps.iter_mut().skip(apply_index) {
+            let x = step.position[0];
+            let y = step.position[1];
 
             let new_x = x * current_rotation_matrix[0] + y * current_rotation_matrix[1];
             let new_y = x * current_rotation_matrix[2] + y * current_rotation_matrix[3];
 
-            vector_steps[modify_index].position = [new_x, new_y];
+            step.position = [new_x, new_y];
         }
 
         final_position[0] += vector_steps[apply_index].position[0];

@@ -5,49 +5,78 @@ use image::{self, RgbaImage};
 
 use crate::common::tools::file;
 
-/// A simple two-dimensional vector representing spatial coordinates or dimensions in floating-point precision.
-#[derive(Clone, Copy, Debug, Default)]
+use super::RigError;
+
+const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+const MINIMUM_PNG_LENGTH: usize = 33;
+
+/// A two-dimensional coordinate or dimension.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ImgVec2 {
+    /// The horizontal component.
     pub x: f32,
+    /// The vertical component.
     pub y: f32
 }
 
 /// A spatial bounding box defined by two points.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ImgRect {
+    /// The upper-left corner of the region.
     pub min: ImgVec2,
+    /// The lower-right corner of the region.
     pub max: ImgVec2
 }
 
-/// Represents a discrete sub-region within a master texture atlas.
-#[derive(Clone, Debug)]
+/// One sprite region within a texture atlas.
+#[derive(Clone, Debug, PartialEq)]
 pub struct SpriteCut {
+    /// The region's bounds expressed as normalized texture coordinates from zero to one.
     pub uv_coordinates: ImgRect,
+    /// The region's dimensions in source pixels, before normalization.
     pub original_size: ImgVec2,
+    /// The region's declared name, which is empty when the cut list supplies none.
     pub name: String,
 }
 
-/// The comprehensive parsed representation of a graphical texture atlas and its spatial mappings.
-#[derive(Clone, Default)]
+/// A decoded texture atlas and the sprite regions carved out of it.
+#[derive(Clone, Debug, Default)]
 pub struct SpriteSheet {
+    /// The decoded atlas with its color channels premultiplied by alpha, shared cheaply between clones.
     pub image_data: Option<Arc<RgbaImage>>,
+    /// The sprite regions carved out of the atlas, keyed by the index the model addresses them through.
     pub cuts_map: HashMap<usize, SpriteCut>,
 }
 
 impl SpriteSheet {
-    #[inline(always)]
-    pub fn parse(png: impl AsRef<[u8]>, imgcut: impl AsRef<[u8]>) -> Option<Self> {
+    /// Parses a texture atlas and its sprite cut list into a resolved sprite sheet.
+    ///
+    /// Color channels are premultiplied by alpha and fully transparent pixels
+    /// zeroed, and sprite regions are normalized against the decoded image
+    /// dimensions. A texture that fails to decode is passed through salvage
+    /// before being abandoned.
+    ///
+    /// # Arguments
+    /// * `png` - The raw bytes of the PNG texture atlas.
+    /// * `imgcut` - The raw bytes of the `.imgcut` sprite region list.
+    ///
+    /// # Returns
+    /// A `Result` containing the resolved `SpriteSheet` on success, or a
+    /// `RigError` if the atlas could not be decoded or the cut list described no
+    /// usable regions.
+    pub fn parse(png: impl AsRef<[u8]>, imgcut: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(png.as_ref(), imgcut.as_ref())
     }
 
-    fn parse_inner(png: &[u8], imgcut: &[u8]) -> Option<Self> {
+    fn parse_inner(png: &[u8], imgcut: &[u8]) -> Result<Self, RigError> {
         let mut image_opt = image::load_from_memory(png).map(|img| img.to_rgba8()).ok();
 
-        if image_opt.is_none() && png.len() > 33 && &png[0..8] == &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
-            image_opt = Self::repair_inner(png);
+        if image_opt.is_none() && png.starts_with(&PNG_MAGIC) {
+            image_opt = Self::repair_inner(png).ok();
         }
 
-        let mut image = image_opt?;
+        let mut image = image_opt.ok_or(RigError::ImageDecodeFailed)?;
 
         let image_width = image.width() as f32;
         let image_height = image.height() as f32;
@@ -124,16 +153,36 @@ impl SpriteSheet {
             });
         }
 
-        Some(Self { image_data: Some(Arc::new(image)), cuts_map: parsed_cuts })
+        if parsed_cuts.is_empty() {
+            return Err(RigError::NoSpriteCuts);
+        }
+
+        Ok(Self { image_data: Some(Arc::new(image)), cuts_map: parsed_cuts })
     }
 
-    /// Salvages corrupted or truncated PNG streams.
-    #[inline(always)]
-    pub fn repair(png: impl AsRef<[u8]>) -> Option<RgbaImage> {
+    /// Salvages a corrupted or truncated PNG stream into the largest decodable image.
+    ///
+    /// Chunk lengths and checksums are rewritten to match the bytes present, and
+    /// the declared height is binary-searched downwards for the tallest prefix
+    /// the decoder accepts. That prefix is composited onto a canvas of the
+    /// original dimensions so sprite coordinates still resolve.
+    ///
+    /// Costs a full decode attempt per search step.
+    ///
+    /// # Arguments
+    /// * `png` - The raw bytes of the damaged PNG stream.
+    ///
+    /// # Returns
+    /// A `Result` containing the recovered image on success, or a `RigError` if
+    /// the stream was too short to carry a header or no prefix of it decoded.
+    pub fn repair(png: impl AsRef<[u8]>) -> Result<RgbaImage, RigError> {
         Self::repair_inner(png.as_ref())
     }
 
-    fn repair_inner(png: &[u8]) -> Option<RgbaImage> {
+    fn repair_inner(png: &[u8]) -> Result<RgbaImage, RigError> {
+        if png.len() < MINIMUM_PNG_LENGTH {
+            return Err(RigError::TruncatedHeader);
+        }
 
         fn calculate_crc32(chunk_type: &[u8], chunk_data: &[u8]) -> u32 {
             let mut crc_value = 0xFFFFFFFFu32;
@@ -208,14 +257,24 @@ impl SpriteSheet {
 
         let sanitized = sanitize_png_chunks(png);
 
-        let orig_width = u32::from_be_bytes([sanitized[16], sanitized[17], sanitized[18], sanitized[19]]);
-        let orig_height = u32::from_be_bytes([sanitized[20], sanitized[21], sanitized[22], sanitized[23]]).min(10000);
+        if sanitized.len() < MINIMUM_PNG_LENGTH {
+            return Err(RigError::TruncatedHeader);
+        }
+
+        let (Some(width_bytes), Some(height_bytes)) = (
+            sanitized.get(16..20).and_then(|slice| <[u8; 4]>::try_from(slice).ok()),
+            sanitized.get(20..24).and_then(|slice| <[u8; 4]>::try_from(slice).ok()),
+        ) else {
+            return Err(RigError::TruncatedHeader);
+        };
+
+        let orig_width = u32::from_be_bytes(width_bytes);
+        let orig_height = u32::from_be_bytes(height_bytes).min(10000);
 
         let mut low = 1;
         let mut high = orig_height;
         let mut best_img = None;
 
-        // Binary-search to extract the maximum surviving partial image
         while low <= high {
             let mid = low + (high - low) / 2;
             let test_buffer = patch_png_height(&sanitized, mid);
@@ -228,16 +287,15 @@ impl SpriteSheet {
             }
         }
 
-        if let Some(partial) = best_img {
-            let mut full_canvas = RgbaImage::new(orig_width, orig_height);
-            for y in 0..partial.height() {
-                for x in 0..partial.width() {
-                    full_canvas.put_pixel(x, y, *partial.get_pixel(x, y));
-                }
+        let partial = best_img.ok_or(RigError::ImageDecodeFailed)?;
+
+        let mut full_canvas = RgbaImage::new(orig_width, orig_height);
+        for y in 0..partial.height() {
+            for x in 0..partial.width() {
+                full_canvas.put_pixel(x, y, *partial.get_pixel(x, y));
             }
-            return Some(full_canvas);
         }
 
-        None
+        Ok(full_canvas)
     }
 }

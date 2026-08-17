@@ -4,7 +4,8 @@ use std::fmt;
 use crate::common::tools::file;
 
 /// Represents an error encountered during the parameter deserialization phase.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParamError {
     /// Indicates that the provided byte payload yielded no actionable key-value pairs.
     EmptyFile,
@@ -20,104 +21,187 @@ impl fmt::Display for ParamError {
 
 impl std::error::Error for ParamError {}
 
-/// Represents the deserialized state of the engine's global parameters.
+/// The engine's global tuning parameters.
 ///
-/// Contains explicitly mapped raw integer values for core combat, UI, and event constants.
+/// Raw integer constants governing combat, interface, and event behavior. Many
+/// columns have no established meaning and are named positionally.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Param {
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_1: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_2: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_3: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_4: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_5: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_6: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_7: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_8: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_9: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_10: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_11: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_12: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_13: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_14: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_15: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_16: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_17: i32,
+    /// The delay in frames before holding a unit opens its detail panel.
     pub hold_cat_details_time: i32,
+    /// The delay in frames between an entity dying and its death surge appearing.
     pub time_until_death_surge: i32,
+    /// The attack multiplier Behemoth Slayer applies against Behemoth targets.
     pub behemoth_slayer_attack_multiplier: i32,
+    /// The damage reduction Behemoth Slayer applies against Behemoth targets.
     pub behemoth_slayer_defense_multiplier: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_22: i32,
+    /// The interval in frames between attempts to play the alternate title screen animation.
     pub logo_superfeline_roll_timer: i32,
+    /// The percentage chance that an attempt to play the alternate title screen animation succeeds.
     pub logo_superfeline_chance_success: i32,
+    /// The percentage added to the chance after each failed attempt.
     pub logo_superfeline_failure_increase: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_26: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_27: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_28: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_29: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_30: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_31: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_32: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_33: i32,
+    /// The output level applied at the lowest volume setting.
     pub volume_setting_percent_small: i32,
+    /// The output level applied at the middle volume setting.
     pub volume_setting_percent_medium: i32,
+    /// The output level applied at the highest volume setting.
     pub volume_setting_percent_large: i32,
+    /// The horizontal offset applied to a conjured spirit relative to its summoner.
     pub spirit_position_offset: i32,
+    /// The weaken duration reduction the Sage trait confers.
     pub sage_type_resist_weaken: i32,
+    /// The freeze duration reduction the Sage trait confers.
     pub sage_type_resist_freeze: i32,
+    /// The slow duration reduction the Sage trait confers.
     pub sage_type_resist_slow: i32,
+    /// The curse duration reduction the Sage trait confers.
     pub sage_type_resist_curse: i32,
+    /// The knockback chance reduction the Sage trait confers.
     pub sage_type_resist_knockback: i32,
+    /// The weaken duration reduction Sage Slayer confers against Sage targets.
     pub sage_slayer_resist_weaken: i32,
+    /// The freeze duration reduction Sage Slayer confers against Sage targets.
     pub sage_slayer_resist_freeze: i32,
+    /// The slow duration reduction Sage Slayer confers against Sage targets.
     pub sage_slayer_resist_slow: i32,
+    /// The curse duration reduction Sage Slayer confers against Sage targets.
     pub sage_slayer_resist_curse: i32,
+    /// The reduction Sage Slayer confers against Sage effects not covered by a dedicated field.
     pub sage_slayer_resist_other: i32,
+    /// The warp duration reduction Sage Slayer confers against Sage targets.
     pub sage_slayer_resist_warp: i32,
+    /// The attack multiplier Sage Slayer applies against Sage targets.
     pub sage_slayer_attack_multiplier: i32,
+    /// The damage reduction Sage Slayer applies against Sage targets.
     pub sage_slayer_defense_multiplier: i32,
+    /// The rule selecting how Metal Killer computes damage from a target's health.
     pub metal_killer_hitpoint_behavior: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_52: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_53: i32,
+    /// The playback rate applied while a story sequence is being held to fast-forward.
     pub story_sequence_hold_speed: i32,
+    /// The delay in frames between an explosion being created and becoming active.
     pub explosion_start_time: i32,
+    /// The number of frames an explosion deals damage for.
     pub explosion_hitbox_duration: i32,
+    /// The delay in frames between an explosion ending and its removal.
     pub explosion_delay_before_deletion: i32,
+    /// The delay in frames before an explosion produces its spike effect.
     pub explosion_delay_until_spike: i32,
+    /// The hitbox width of a large explosion.
     pub explosion_big_width: i32,
+    /// The hitbox width of a medium explosion.
     pub explosion_medium_width: i32,
+    /// The hitbox width of a small explosion.
     pub explosion_small_width: i32,
+    /// The damage multiplier applied by a large explosion.
     pub explosion_big_damage_multiplier: i32,
+    /// The damage multiplier applied by a medium explosion.
     pub explosion_medium_damage_multiplier: i32,
+    /// The damage multiplier applied by a small explosion.
     pub explosion_small_damage_multiplier: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_65: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_66: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_67: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_68: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_69: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_70: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_71: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_72: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_73: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_74: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_75: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_76: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_77: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_78: i32,
+    /// The number of days the returning-player treasure festival runs for.
     pub comeback_treasure_festival_days: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_80: i32,
+    /// A parameter present in the raw data whose effect on the engine is not established.
     pub unknown_81: i32,
-    /// Captures any trailing parametric data outside the scope of explicitly mapped fields.
+    /// Any trailing columns beyond the known layout, retained verbatim.
     pub rest: Vec<i32>,
 }
 
 impl Param {
-    /// Deserializes raw byte streams into a structured `Param` instance.
+    /// Parses the global parameter file into its constants.
     ///
     /// # Arguments
-    /// * `bytes` - A polymorphic byte slice reference representing the parameters payload.
+    /// * `bytes` - The raw, decrypted byte slice of the parameter file.
     ///
     /// # Returns
-    /// A populated `Param` struct, or a `ParamError` if the payload is structurally invalid.
+    /// A `Result` containing the populated `Param` on success, or a `ParamError`
+    /// if the payload held no usable values.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, ParamError> {
         parse_inner(bytes.as_ref())
     }

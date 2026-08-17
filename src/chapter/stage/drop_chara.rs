@@ -1,3 +1,4 @@
+//! Units unlocked as a reward for clearing particular stages.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of unit unlock drops.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DropCharaError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -23,12 +27,22 @@ impl fmt::Display for DropCharaError {
 
 impl std::error::Error for DropCharaError {}
 
+/// The parsed contents of the unit unlock drop table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DropChara {
+    /// The identifier of the unit each stage unlocks, keyed by stage identifier.
     pub character_drops: HashMap<u32, u32>,
 }
 
 impl DropChara {
+    /// Parses the unit unlock drop table into a mapping from stage to unit.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the character drop file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `DropChara` on success, or a
+    /// `DropCharaError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, DropCharaError> {
         parse_inner(bytes.as_ref())
     }

@@ -3,8 +3,11 @@ use std::fmt;
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of talent configurations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SkillAcquisitionError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
 }
 
@@ -18,26 +21,22 @@ impl fmt::Display for SkillAcquisitionError {
 
 impl std::error::Error for SkillAcquisitionError {}
 
-/// Represents the complete talent configuration for a specific entity.
-///
-/// This structure encapsulates the assigned identifier, structural typing, and the
-/// flat collection of individual upgradeable talents available to the entity.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// A unit's complete talent configuration.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Talent {
-    /// The primary internal identifier linking this configuration to a specific entity.
-    pub id: u16,
+    /// The identifier of the unit this configuration belongs to.
+    pub id: u32,
     /// The structural classification flag for the talent layout.
     pub type_id: u16,
     /// The collection of individual talents.
     pub groups: Vec<TalentGroup>,
 }
 
-/// Represents an individual upgradeable talent within a configuration.
+/// One upgradeable talent within a configuration.
 ///
-/// This structure defines the boundary parameters, level caps, and referential
-/// indices required to compute the exact mathematical weight of the talent at
-/// any valid progression level.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// Carries the boundary parameters and level cap needed to compute the talent's
+/// effect at any level, plus the indices linking it to its cost curve and text.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TalentGroup {
     /// The internal ID specifying the mechanical effect of the talent.
     pub ability_id: u8,
@@ -70,6 +69,22 @@ pub struct TalentGroup {
 }
 
 impl TalentGroup {
+    /// Interpolates a talent's effect value at a given progression level.
+    ///
+    /// The value scales linearly between the declared minimum and maximum
+    /// boundaries across the talent's level range. Level zero yields no effect,
+    /// the first level yields exactly the minimum, and the maximum level yields
+    /// exactly the maximum, so the endpoints are never subject to rounding.
+    ///
+    /// # Arguments
+    /// * `min` - The boundary parameter representing the effect at the first level.
+    /// * `max` - The boundary parameter representing the effect at the maximum level.
+    /// * `level` - The current progression level to evaluate.
+    /// * `max_level` - The highest level this talent may reach.
+    ///
+    /// # Returns
+    /// An `i32` containing the rounded effect value at the requested level, or
+    /// zero when the talent is unlearned.
     pub fn calculate_value(min: u16, max: u16, level: u8, max_level: u8) -> i32 {
         if level == 0 { return 0; }
         if max_level <= 1 { return min as i32; }
@@ -87,12 +102,26 @@ impl TalentGroup {
 }
 
 impl Talent {
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u16, Self>, SkillAcquisitionError> {
+    /// Parses the talent acquisition table into configurations keyed by unit identifier.
+    ///
+    /// Each row declares one unit's talent layout followed by a variable-length
+    /// run of fourteen-column talent groups, terminated by a group whose ability
+    /// identifier is zero. Rows whose leading column is not a valid identifier
+    /// are skipped, which discards any header the file carries.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the `SkillAcquisition.csv` file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed configurations keyed by unit identifier
+    /// on success, or a `SkillAcquisitionError` if the file contained no
+    /// parseable rows.
+    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u32, Self>, SkillAcquisitionError> {
         parse_inner(bytes.as_ref())
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<HashMap<u16, Talent>, SkillAcquisitionError> {
+fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, Talent>, SkillAcquisitionError> {
     let file_content = file::scrub(bytes);
     let delimiter = file::detect_separator(&file_content);
 
@@ -102,10 +131,7 @@ fn parse_inner(bytes: &[u8]) -> Result<HashMap<u16, Talent>, SkillAcquisitionErr
         let parts: Vec<&str> = line.split(delimiter).collect();
         if parts.len() < 2 { continue; }
 
-        let id = match parts[0].trim().parse::<u16>() {
-            Ok(parsed_value) => parsed_value,
-            Err(_) => continue,
-        };
+        let Ok(id) = parts[0].trim().parse::<u32>() else { continue; };
 
         let type_id = parts[1].trim().parse::<u16>().unwrap_or(0);
         let mut groups = Vec::new();

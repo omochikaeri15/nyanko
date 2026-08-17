@@ -1,10 +1,16 @@
-/// Dynamically determines the delimiter character utilized within a raw text payload.
+//! Sanitization and structural probing of raw delimited text files.
+//!
+//! The engine's data files vary in encoding, line ending, and delimiter between
+//! regions and versions, so every parser normalizes its input through these
+//! helpers before reading any columns.
+
+/// Determines the delimiter a raw text payload uses.
 ///
 /// # Arguments
-/// * `text` - A string slice representing the raw data segment.
+/// * `text` - The sanitized text to probe.
 ///
 /// # Returns
-/// A `char` representing the detected delimiter. Defaults to a comma (`,`) if no alternative is structurally identified.
+/// A `char` holding the detected delimiter, defaulting to a comma.
 pub fn detect_separator(text: &str) -> char {
     if text.contains('|') {
         return '|';
@@ -15,13 +21,14 @@ pub fn detect_separator(text: &str) -> char {
         .unwrap_or(',')
 }
 
-/// Sanitizes raw byte streams into a UTF-8 string format, stripping invalid bytes and normalizing line endings.
+/// Converts raw bytes to a string, dropping byte-order marks and null characters
+/// and normalizing line endings.
 ///
 /// # Arguments
-/// * `bytes` - A slice of raw bytes extracted directly from the filesystem or memory.
+/// * `bytes` - The raw bytes to sanitize.
 ///
 /// # Returns
-/// A sanitized `String` guaranteed to be safely traversable by standard text utilities.
+/// A `String` safe to traverse with the standard text utilities.
 pub fn scrub(bytes: &[u8]) -> String {
     let raw_text = String::from_utf8_lossy(bytes);
     let mut clean_text = String::with_capacity(raw_text.len());
@@ -46,10 +53,10 @@ pub fn scrub(bytes: &[u8]) -> String {
     clean_text
 }
 
-/// Dictates how `<br>` tags should be handled during the HTML stripping process.
+/// How `<br>` tags are substituted when stripping HTML.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BreakHandling {
-    /// Replaces `<br>` with a standard space (` `), ensuring safe horizontal spacing.
+    /// Replaces `<br>` with a single space, collapsing runs.
     Space,
     /// Replaces `<br>` with a newline character (`\n`).
     Newline,
@@ -57,14 +64,14 @@ pub enum BreakHandling {
     Delete,
 }
 
-/// Strips HTML tags from a string and processes `<br>` elements based on a specified handling strategy.
+/// Strips HTML tags from a string, handling `<br>` by the given strategy.
 ///
 /// # Arguments
-/// * `input` - A string slice representing the raw text containing HTML tags.
-/// * `handling` - A `BreakHandling` enum variant dictating how `<br>` elements are processed.
+/// * `input` - The raw text to strip.
+/// * `handling` - How `<br>` elements should be substituted.
 ///
 /// # Returns
-/// A clean `String` with HTML tags removed and `<br>` elements processed according to the chosen strategy.
+/// A `String` with tags removed and breaks substituted.
 pub fn strip_html_tags(input: &str, handling: BreakHandling) -> String {
     let mut stripped = String::with_capacity(input.len());
     let mut rest = input;
@@ -99,16 +106,16 @@ pub fn strip_html_tags(input: &str, handling: BreakHandling) -> String {
     stripped
 }
 
-/// Executes a stateless positional lookup within a raw CSV byte stream.
+/// Finds a row by one column's value and returns another column from it.
 ///
 /// # Arguments
-/// * `data` - A slice of raw bytes containing the target byte stream.
-/// * `key` - The string identifier to locate within the target search axis.
-/// * `search_col` - The zero-indexed column vector to scan for the provided identifier.
-/// * `target_col` - The zero-indexed column vector utilized for extraction upon a match.
+/// * `data` - The raw bytes of the table to search.
+/// * `key` - The value to match against `search_col`.
+/// * `search_col` - The zero-indexed column to match on.
+/// * `target_col` - The zero-indexed column to extract from the matched row.
 ///
 /// # Returns
-/// An `Option<String>` containing the trimmed extracted value upon successful localization, or `None` if the target is not found.
+/// An `Option` containing the trimmed value, or `None` if no row matched.
 pub fn lookup(
     data: &[u8],
     key: &str,

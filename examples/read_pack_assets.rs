@@ -2,8 +2,8 @@
 mod example {
     use std::fs;
     use std::path::Path;
-    use nyanko::pack::cryptology::{Keys, decrypt_list, decrypt_chunk};
-    use nyanko::common::utils::variant::Region;
+    use nyanko::pack::cryptology::{Decrypted, Keys, decrypt_chunk, decrypt_list};
+    use nyanko::common::tools::variant::Region;
 
     /// The 16-byte hex-encoded key for regional asset decryption.
     const TARGET_KEY_HEX: &str = "0123456789abcdef0123456789abcdef";
@@ -93,19 +93,26 @@ mod example {
         // Slices the specific encrypted payload from the master archive using the manifest boundaries.
         let chunk_bytes = &full_pack_bytes[target_offset..end_bound];
 
-        let (decrypted_data, region_used) = decrypt_chunk(chunk_bytes, &target_filename, &keys);
+        let (decrypted_data, origin) = decrypt_chunk(chunk_bytes, &target_filename, &keys);
 
-        if let Some(reg) = region_used {
-            println!("Success! Chunk decrypted using regional CBC key: {:?}", reg);
-            println!("\n--- [ Payload Preview ] ---");
+        match origin {
+            Decrypted::Regional(region) => {
+                println!("Success! Chunk decrypted using regional CBC key: {:?}", region);
+                println!("\n--- [ Payload Preview ] ---");
 
-            let payload_text = String::from_utf8_lossy(&decrypted_data);
+                let payload_text = String::from_utf8_lossy(&decrypted_data);
 
-            for (index, line) in payload_text.lines().enumerate().take(3) {
-                println!("Line {}: {}", index + 1, line);
+                for (index, line) in payload_text.lines().enumerate().take(3) {
+                    println!("Line {}: {}", index + 1, line);
+                }
             }
-        } else {
-            println!("Chunk processed via server ECB fallback or passed raw. Byte len: {}", decrypted_data.len());
+            Decrypted::Server => {
+                println!("Chunk decrypted using the server ECB key. Byte len: {}", decrypted_data.len());
+            }
+            Decrypted::Passthrough => {
+                println!("No cipher matched, so the chunk was returned unchanged.");
+                println!("This means the supplied keys are wrong, or the chunk was never encrypted.");
+            }
         }
     }
 }

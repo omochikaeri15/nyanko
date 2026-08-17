@@ -1,3 +1,5 @@
+//! Predetermined player states imposed on stages that equalize progression.
+
 use std::collections::HashMap;
 use std::fmt;
 
@@ -6,8 +8,11 @@ use serde_json::Value;
 
 use crate::common::tools::file::scrub;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of a fixed lineup preset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CertificationPresetError {
+    /// The supplied bytes were not valid JSON.
     InvalidJson,
 }
 
@@ -24,17 +29,27 @@ impl fmt::Display for CertificationPresetError {
 
 impl std::error::Error for CertificationPresetError {}
 
+/// Identifies one of the base cannon's interchangeable effect modes.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CannonType {
+    /// The unmodified cannon, which deals damage and knocks back.
     #[default]
     Basic,
+    /// The Slow Beam mode, which slows the enemies it strikes.
     SlowBeam,
+    /// The Iron Wall mode, which raises a defensive barrier.
     IronWall,
+    /// The Thunderbolt mode, which freezes the enemies it strikes.
     Thunderbolt,
+    /// The Waterblast mode, which deals increased damage.
     Waterblast,
+    /// The Holy Blast mode, which counters surges and waves.
     HolyBlast,
+    /// The Breakerblast mode, which destroys barriers and shields.
     Breakerblast,
+    /// The Curseblast mode, which curses the enemies it strikes.
     Curseblast,
+    /// A cannon code this parser does not recognize, carrying its raw value.
     Unknown(u8),
 }
 
@@ -54,18 +69,30 @@ impl From<u8> for CannonType {
     }
 }
 
+/// Identifies one of the permanently upgradeable base abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityType {
+    /// The base cannon's damage output.
     CatCannonAttack,
+    /// The base cannon's effective range.
     CatCannonRange,
+    /// The base cannon's recharge rate.
     CatCannonCharge,
+    /// The rate at which the worker cat accumulates budget.
     WorkerCatRate,
+    /// The maximum budget the worker cat may hold.
     WorkerCatWallet,
+    /// The player base's health pool.
     BaseDefense,
+    /// The reduction applied to unit redeployment delays.
     Research,
+    /// The increase applied to currency earned from defeats.
     BountyUp,
+    /// The increase applied to experience earned from clears.
     Study,
+    /// The player's maximum energy reserve.
     CatEnergy,
+    /// An ability code this parser does not recognize, carrying its raw value.
     Unknown(u8),
 }
 
@@ -87,17 +114,28 @@ impl From<u8> for AbilityType {
     }
 }
 
+/// Identifies the chapter a treasure set was collected from.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TreasureType {
+    /// Treasures from the first Empire of Cats chapter.
     EoC1,
+    /// Treasures from the second Empire of Cats chapter.
     EoC2,
+    /// Treasures from the third Empire of Cats chapter.
     EoC3,
+    /// Treasures from the first Into the Future chapter.
     ItF1,
+    /// Treasures from the second Into the Future chapter.
     ItF2,
+    /// Treasures from the third Into the Future chapter.
     ItF3,
+    /// Treasures from the first Cats of the Cosmos chapter.
     CotC1,
+    /// Treasures from the second Cats of the Cosmos chapter.
     CotC2,
+    /// Treasures from the third Cats of the Cosmos chapter.
     CotC3,
+    /// A treasure code this parser does not recognize, carrying its raw value.
     Unknown(u8),
 }
 
@@ -118,13 +156,19 @@ impl From<u8> for TreasureType {
     }
 }
 
+/// Identifies which evolutionary form of a unit a preset fields.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EvolutionForm {
+    /// The unit's base form.
     #[default]
     Normal,
+    /// The unit's first evolution.
     Evolved,
+    /// The unit's True form.
     True,
+    /// The unit's Ultra form.
     Ultra,
+    /// A form code this parser does not recognize, carrying its raw value.
     Unknown(u8),
 }
 
@@ -140,37 +184,71 @@ impl From<u8> for EvolutionForm {
     }
 }
 
+/// The state a preset fields one unit at.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PresetChara {
+    /// The evolutionary form the unit is fielded in.
     pub evolution_form: EvolutionForm,
+    /// The unit's ordinary level.
     pub level: u16,
+    /// The unit's plus level, accumulated beyond the ordinary cap.
     pub plus_level: u16,
 }
 
+/// The state a preset grants one base ability at.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PresetAbility {
+    /// The ability's ordinary level.
     pub level: u16,
+    /// The ability's plus level, accumulated beyond the ordinary cap.
     pub plus_level: u16,
 }
 
+/// The treasures a preset grants from one chapter.
+///
+/// The three grades stack, so each is counted separately.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PresetTreasure {
+    /// The number of lowest-grade treasures granted.
     pub inferior_count: u8,
+    /// The number of middle-grade treasures granted.
     pub normal_count: u8,
+    /// The number of highest-grade treasures granted.
     pub superior_count: u8,
 }
 
+/// A complete predetermined player state imposed on a stage.
+///
+/// A preset replaces the player's roster, upgrades, and treasures entirely, so
+/// every attempt is fought under identical conditions.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CertificationPreset {
+    /// The state each available unit is fielded at, keyed by unit identifier.
     pub characters: HashMap<u32, PresetChara>,
+    /// The identifiers of the units occupying the lineup slots, in slot order.
     pub slot_units: Vec<u32>,
+    /// The cannon mode the base is equipped with.
     pub slot_cannon_type: CannonType,
+    /// The level each base ability is granted at, keyed by ability.
     pub abilities: HashMap<AbilityType, PresetAbility>,
+    /// The level each cannon mode is granted at, keyed by mode.
     pub cannon_levels: HashMap<CannonType, u16>,
+    /// The treasures granted from each chapter, keyed by chapter.
     pub treasures: HashMap<TreasureType, PresetTreasure>,
 }
 
 impl CertificationPreset {
+    /// Parses a fixed lineup preset document into a complete player state.
+    ///
+    /// This source is JSON rather than delimited text. Unrecognized codes are
+    /// retained in their respective `Unknown` variants rather than discarded.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the preset JSON document.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `CertificationPreset` on success, or a
+    /// `CertificationPresetError` if the bytes were not valid JSON.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, CertificationPresetError> {
         let clean_json = scrub(bytes.as_ref());
         parse_inner(&clean_json)
@@ -275,22 +353,18 @@ fn extract_abilities(json_root: &Value, lineup: &mut CertificationPreset) {
         let ability_type = AbilityType::from(ability_id);
 
         let mut level = 0;
-        if let Some(level_value) = ability_value.get("level") {
-            if let Some(string_val) = level_value.as_str() {
-                if let Ok(parsed_level) = string_val.parse::<u16>() {
+        if let Some(level_value) = ability_value.get("level")
+            && let Some(string_val) = level_value.as_str()
+                && let Ok(parsed_level) = string_val.parse::<u16>() {
                     level = parsed_level;
                 }
-            }
-        }
 
         let mut plus_level = 0;
-        if let Some(plus_value) = ability_value.get("plus") {
-            if let Some(string_val) = plus_value.as_str() {
-                if let Ok(parsed_plus) = string_val.parse::<u16>() {
+        if let Some(plus_value) = ability_value.get("plus")
+            && let Some(string_val) = plus_value.as_str()
+                && let Ok(parsed_plus) = string_val.parse::<u16>() {
                     plus_level = parsed_plus;
                 }
-            }
-        }
 
         lineup.abilities.insert(
             ability_type,

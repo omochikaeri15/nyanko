@@ -5,7 +5,9 @@ use crate::common::tools::file;
 
 /// Represents errors that can occur during the parsing of enemy picture book descriptions.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EnemyPictureBookError {
+    /// The supplied bytes yielded no lines at all.
     EmptyData,
 }
 
@@ -19,39 +21,45 @@ impl fmt::Display for EnemyPictureBookError {
 
 impl error::Error for EnemyPictureBookError {}
 
-/// Represents the localized multi-line dictionary description for an enemy entity.
+/// An enemy's localized dictionary description.
 ///
-/// Automatically strips internal placeholders (such as "仮") and null characters,
-/// returning a clean, structured array of strings ready for rendering.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+/// Placeholder lines beginning with "仮" are stripped.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EnemyPictureBook {
     /// A vector of parsed text lines. Evaluates to `None` if the description is missing or invalid.
     pub description: Option<Vec<String>>,
 }
 
 impl EnemyPictureBook {
-    /// Parses a raw byte stream into a vector of `EnemyPictureBook` structures.
+    /// Parses the enemy picture book table into one entry per declared enemy.
+    ///
+    /// Every line contributes an entry, including blank ones, so an entry's
+    /// position in the returned vector is its internal enemy identifier.
     ///
     /// # Arguments
-    /// * `b` - The raw byte slice of the picture book description file.
+    /// * `bytes` - The raw, decrypted byte slice of the picture book description file.
     ///
     /// # Returns
-    /// A `Result` containing the vector of structured `EnemyPictureBook`s on success, or an
-    /// `EnemyPictureBookError` if the file contained no parseable text.
-    pub fn parse_all<T: AsRef<[u8]>>(b: T) -> Result<Vec<Self>, EnemyPictureBookError> {
-        parse_all_inner(b.as_ref())
+    /// A `Result` containing the parsed descriptions indexed by enemy identifier
+    /// on success, or an `EnemyPictureBookError` if the file contained no lines.
+    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Self>, EnemyPictureBookError> {
+        parse_inner(bytes.as_ref())
     }
 
-    /// Safely extracts and parses a single `EnemyPictureBook` based on its internal ID line index.
+    /// Parses a single row of the enemy picture book table by enemy identifier.
+    ///
+    /// This avoids materializing the entire table when only one description is
+    /// required.
     ///
     /// # Arguments
-    /// * `b` - The raw byte slice of the picture book description file.
-    /// * `id` - The specific line index corresponding to the enemy's internal ID.
+    /// * `bytes` - The raw, decrypted byte slice of the picture book description file.
+    /// * `id` - The internal enemy identifier, used as a zero-based line offset.
     ///
     /// # Returns
-    /// A `Result` containing an `Option<EnemyPictureBook>` if the line exists, or `None` if the ID is out of bounds.
-    pub fn parse<T: AsRef<[u8]>>(b: T, id: usize) -> Result<Option<Self>, EnemyPictureBookError> {
-        parse_inner(b.as_ref(), id)
+    /// An `Option` containing the parsed description, or `None` if the
+    /// identifier lies beyond the end of the table.
+    pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Self> {
+        parse_row_inner(bytes.as_ref(), id)
     }
 }
 
@@ -70,14 +78,14 @@ fn parse_line_data(line: &str, separator: char) -> EnemyPictureBook {
     }
 }
 
-fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookError> {
+fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookError> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
-    let mut descriptions = Vec::new();
 
-    for line in content.lines() {
-        descriptions.push(parse_line_data(line, separator));
-    }
+    let descriptions: Vec<EnemyPictureBook> = content
+        .lines()
+        .map(|line| parse_line_data(line, separator))
+        .collect();
 
     if descriptions.is_empty() {
         return Err(EnemyPictureBookError::EmptyData);
@@ -86,13 +94,9 @@ fn parse_all_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBo
     Ok(descriptions)
 }
 
-fn parse_inner(bytes: &[u8], id: usize) -> Result<Option<EnemyPictureBook>, EnemyPictureBookError> {
+fn parse_row_inner(bytes: &[u8], id: usize) -> Option<EnemyPictureBook> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
 
-    let Some(target_line) = content.lines().nth(id) else {
-        return Ok(None);
-    };
-
-    Ok(Some(parse_line_data(target_line, separator)))
+    content.lines().nth(id).map(|line| parse_line_data(line, separator))
 }

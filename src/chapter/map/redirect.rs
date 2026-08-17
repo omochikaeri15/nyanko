@@ -1,3 +1,17 @@
+//! Resolution of map identifiers that address a different map's data.
+
+/// Resolves a map identifier to the identifier its data is actually stored under.
+///
+/// Several late-game and variant maps are addressed by one identifier in the
+/// stage tables while their configuration lives under another, so a direct
+/// lookup for these would find nothing. Identifiers without such an indirection
+/// are returned unchanged.
+///
+/// # Arguments
+/// * `id` - The map identifier as it appears in the referring table.
+///
+/// # Returns
+/// A `u32` containing the identifier the map's own data is keyed by.
 pub fn redirect_map_id(id: u32) -> u32 {
     match id {
         20000 => 3008, // EoC 1 Zombie

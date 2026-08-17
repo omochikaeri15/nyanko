@@ -1,3 +1,4 @@
+//! Per-map behavioral configuration such as crown tiers and repeat timers.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,9 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of map options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MapOptionError {
+    /// The supplied bytes yielded no parseable rows beyond the header.
     EmptyFile,
+    /// The supplied bytes did not begin with the required header row.
     MissingHeaders,
 }
 
@@ -28,13 +33,19 @@ impl fmt::Display for MapOptionError {
 
 impl std::error::Error for MapOptionError {}
 
+/// Selects what a map discards when its repeat timer elapses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ResetType {
+    /// Nothing is reset, so the map's rewards are claimable once only.
     #[default]
     None,
+    /// The map's reward flags are cleared, making its drops claimable again.
     ResetRewards,
+    /// The reward flags and the cleared marker are both cleared.
     ResetRewardsAndClear,
+    /// The accumulated clear count is cleared.
     ResetMaxClears,
+    /// A reset code this parser does not recognize, carrying its raw value.
     Unknown(u8),
 }
 
@@ -50,28 +61,56 @@ impl From<u8> for ResetType {
     }
 }
 
+/// The behavioral configuration of a single map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapOptionEntry {
+    /// The identifier of the map this configuration applies to.
     pub map_id: u32,
+    /// The highest crown difficulty the map can be attempted at.
     pub max_crowns: u8,
+    /// Whether the map exposes the additional Abyss difficulty tier.
     pub has_abyss: bool,
+    /// The enemy strength percentage applied at one crown, if declared.
     pub crown_1_mag: Option<u32>,
+    /// The enemy strength percentage applied at two crowns, if declared.
     pub crown_2_mag: Option<u32>,
+    /// The enemy strength percentage applied at three crowns, if declared.
     pub crown_3_mag: Option<u32>,
+    /// The enemy strength percentage applied at four crowns, if declared.
     pub crown_4_mag: Option<u32>,
+    /// What the map discards when its repeat timer elapses.
     pub reset_type: ResetType,
+    /// The number of times the map may be cleared for rewards.
     pub max_clears: u32,
+    /// The delay in minutes before the map becomes available again.
     pub cooldown_minutes: u32,
+    /// Whether the map is removed from the selection list once cleared.
     pub hidden_upon_clear: bool,
+    /// The trailing comment text accompanying the row in the source file.
     pub comment: String,
 }
 
+/// The parsed contents of the map option table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapOption {
+    /// The map configurations, keyed by map identifier.
     pub entries: HashMap<u32, MapOptionEntry>,
 }
 
 impl MapOption {
+    /// Parses the map option table into per-map behavioral configurations.
+    ///
+    /// The leading header row is skipped. Rows short of the expected column
+    /// count have known-optional columns reinserted at their documented
+    /// positions, which keeps older regional files readable against the current
+    /// layout. Trailing comment text is retained on the resulting entry.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the map option file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `MapOption` on success, or a
+    /// `MapOptionError` if the header was absent or no rows were parseable.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, MapOptionError> {
         parse_inner(bytes.as_ref())
     }
@@ -112,8 +151,7 @@ fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
         let injection_points = [(2, "0")];
 
         let missing_cols = expected_columns.saturating_sub(parts.len());
-        for i in 0..missing_cols.min(injection_points.len()) {
-            let (inject_idx, default_val) = injection_points[i];
+        for &(inject_idx, default_val) in injection_points.iter().take(missing_cols) {
             if inject_idx <= parts.len() {
                 parts.insert(inject_idx, default_val);
             }

@@ -1,3 +1,4 @@
+//! Assignment of predetermined unit lineups to particular stages.
 use std::collections::HashMap;
 use std::fmt;
 
@@ -5,9 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
-#[derive(Debug)]
+/// Represents errors that can occur during the parsing of fixed lineup assignments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FixedFormationError {
+    /// The supplied bytes yielded no parseable rows.
     EmptyFile,
+    /// The supplied bytes did not begin with the required header row.
     MissingHeaders,
 }
 
@@ -28,21 +33,41 @@ impl fmt::Display for FixedFormationError {
 
 impl std::error::Error for FixedFormationError {}
 
+/// The assignment of a fixed lineup to one stage at one difficulty.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FixedFormationEntry {
+    /// The identifier of the map the assignment applies to.
     pub map_id: u32,
+    /// The crown difficulty the assignment applies at.
     pub level: u8,
+    /// The index of the stage within its map.
     pub stage_no: u32,
+    /// The name of the preset file declaring the lineup to impose.
     pub preset_file_name: String,
+    /// The trailing note accompanying the row in the source file.
     pub memo: String,
 }
 
+/// The parsed contents of the fixed lineup assignment table.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FixedFormation {
+    /// The assignments, keyed by the map identifier, crown difficulty, and stage index together.
     pub formations: HashMap<(u32, u8, u32), FixedFormationEntry>,
 }
 
 impl FixedFormation {
+    /// Parses the fixed lineup assignment table into per-stage assignments.
+    ///
+    /// A stage may impose different lineups at different crown difficulties, so
+    /// entries are keyed by map, difficulty, and stage index together rather
+    /// than by stage alone.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw, decrypted byte slice of the fixed formation file.
+    ///
+    /// # Returns
+    /// A `Result` containing the parsed `FixedFormation` on success, or a
+    /// `FixedFormationError` if the file contained no parseable rows.
     pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, FixedFormationError> {
         parse_inner(bytes.as_ref())
     }
@@ -84,11 +109,10 @@ fn parse_inner(bytes: &[u8]) -> Result<FixedFormation, FixedFormationError> {
         let parts: Vec<&str> = trimmed_line.split(separator_char).collect();
 
         let get_value = |header_name: &str, fallback_index: usize| -> Option<&str> {
-            if let Some(&column_index) = headers_map.get(header_name) {
-                if let Some(value) = parts.get(column_index) {
+            if let Some(&column_index) = headers_map.get(header_name)
+                && let Some(value) = parts.get(column_index) {
                     return Some(value.trim());
                 }
-            }
             if let Some(value) = parts.get(fallback_index) {
                 return Some(value.trim());
             }

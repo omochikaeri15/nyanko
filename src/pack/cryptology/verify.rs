@@ -1,11 +1,12 @@
-/// Verifies the integrity of decrypted data by checking file magic bytes or text encoding.
+/// Checks decrypted data against the signature its filename implies.
 ///
 /// # Arguments
-/// * `data` - The raw, decrypted byte array.
-/// * `filename` - The target filename used to determine the expected file signature.
+/// * `data` - The decrypted bytes to check.
+/// * `filename` - The expected filename, whose extension selects the signature.
 ///
 /// # Returns
-/// Returns `true` if the data matches the expected format, `false` otherwise.
+/// A `bool` that is `true` when the data matches, and `true` for extensions
+/// carrying no known signature.
 pub fn check_integrity(data: &[u8], filename: &str) -> bool {
     let ext = filename
         .rsplit_once('.')
