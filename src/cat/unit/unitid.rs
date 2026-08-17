@@ -1,323 +1,135 @@
 use std::cell::Cell;
-use std::fmt;
 
-use crate::common::tools::file;
+use crate::combat::{Entity, EntityError, Faction, entity};
 
-#[derive(Debug)]
-pub enum BattleError {
-    EmptyFile,
+pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
+    entity::parse_rows(bytes.as_ref(), 0, from_row)
 }
 
-impl fmt::Display for BattleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BattleError::EmptyFile => write!(f, "The provided file bytes contained no valid units."),
-        }
-    }
-}
-
-impl std::error::Error for BattleError {}
-
-/// Represents the complete statistical and behavioral profile for a single entity form.
-///
-/// This structure defines the strictly ordered array of combat parameters, execution
-/// timings, targeting flags, and specialized ability modifiers mapping directly to
-/// the application's internal simulation engine.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct Battle {
-    pub hitpoints: i32,
-    pub knockbacks: i32,
-    pub speed: i32,
-    pub attack_1: i32,
-    pub attack_cooldown: i32,
-    pub standing_range: i32,
-    pub eoc1_cost: i32,
-    pub cooldown: i32,
-    pub hitbox_position: i32,
-    pub hitbox_width: i32,
-    pub target_red: i32,
-    pub unused: i32,
-    pub area_attack: i32,
-    pub time_until_attack_1: i32,
-    pub minimum_z_layer: i32,
-    pub maximum_z_layer: i32,
-    pub target_floating: i32,
-    pub target_dark: i32,
-    pub target_metal: i32,
-    pub target_traitless: i32,
-    pub target_angel: i32,
-    pub target_alien: i32,
-    pub target_zombie: i32,
-    pub strong_against: i32,
-    pub knockback_chance: i32,
-    pub freeze_chance: i32,
-    pub freeze_duration: i32,
-    pub slow_chance: i32,
-    pub slow_duration: i32,
-    pub resist: i32,
-    pub massive_damage: i32,
-    pub critical_chance: i32,
-    pub attack_only: i32,
-    pub double_bounty: i32,
-    pub base_destroyer: i32,
-    pub wave_chance: i32,
-    pub wave_level: i32,
-    pub weaken_chance: i32,
-    pub weaken_duration: i32,
-    pub weaken_to: i32,
-    pub strengthen_threshold: i32,
-    pub strengthen_boost: i32,
-    pub survive: i32,
-    pub metal: i32,
-    pub long_distance_1_anchor: i32,
-    pub long_distance_1_span: i32,
-    pub wave_immune: i32,
-    pub wave_block: i32,
-    pub knockback_immune: i32,
-    pub freeze_immune: i32,
-    pub slow_immune: i32,
-    pub weaken_immune: i32,
-    pub zombie_killer: i32,
-    pub witch_killer: i32,
-    pub target_witch: i32,
-    pub attack_count_total: i32,
-    pub boss_wave_immune: i32,
-    pub time_before_death: i32,
-    pub attack_count_state: i32,
-    pub attack_2: i32,
-    pub attack_3: i32,
-    pub time_until_attack_2: i32,
-    pub time_until_attack_3: i32,
-    pub attack_1_abilities: i32,
-    pub attack_2_abilities: i32,
-    pub attack_3_abilities: i32,
-    pub spawn_animation_type: i32,
-    pub soul_animation_type: i32,
-    pub spawn_animation_flag: i32,
-    pub soul_animation_flag: i32,
-    pub barrier_breaker_chance: i32,
-    pub warp_chance: i32,
-    pub warp_duration: i32,
-    pub warp_distance_minimum: i32,
-    pub warp_distance_maximum: i32,
-    pub warp_immune: i32,
-    pub target_eva: i32,
-    pub eva_killer: i32,
-    pub target_relic: i32,
-    pub curse_immune: i32,
-    pub insanely_tough: i32,
-    pub insane_damage: i32,
-    pub savage_blow_chance: i32,
-    pub savage_blow_boost: i32,
-    pub dodge_chance: i32,
-    pub dodge_duration: i32,
-    pub surge_chance: i32,
-    pub surge_spawn_anchor: i32,
-    pub surge_spawn_span: i32,
-    pub surge_level: i32,
-    pub toxic_immune: i32,
-    pub surge_immune: i32,
-    pub curse_chance: i32,
-    pub curse_duration: i32,
-    pub mini_wave_flag: i32,
-    pub shield_pierce_chance: i32,
-    pub target_aku: i32,
-    pub colossus_slayer: i32,
-    pub soulstrike: i32,
-    pub long_distance_2_flag: i32,
-    pub long_distance_2_anchor: i32,
-    pub long_distance_2_span: i32,
-    pub long_distance_3_flag: i32,
-    pub long_distance_3_anchor: i32,
-    pub long_distance_3_span: i32,
-    pub behemoth_slayer: i32,
-    pub behemoth_dodge_chance: i32,
-    pub behemoth_dodge_duration: i32,
-    pub mini_surge_flag: i32,
-    pub counter_surge: i32,
-    pub conjure_unit_id: i32,
-    pub sage_slayer: i32,
-    pub metal_killer_percent: i32,
-    pub explosion_chance: i32,
-    pub explosion_spawn_anchor: i32,
-    pub explosion_spawn_span: i32,
-    pub explosion_immune: i32,
-    pub has_unknown_abilities: i32,
-}
-
-impl Battle {
-    pub fn from_csv_line(csv_line: &str, delimiter: char) -> Option<Self> {
-        let line_parts: Vec<&str> = csv_line.split(delimiter).collect();
-        if line_parts.len() < 10 { return None; }
-
-        let max_read = Cell::new(0);
-
-        let get_int = |idx: usize| {
-            max_read.set(max_read.get().max(idx));
-            line_parts.get(idx).and_then(|s: &&str| s.trim().parse::<i32>().ok()).unwrap_or(0)
-        };
-
-        let get_int_neg = |idx: usize| {
-            max_read.set(max_read.get().max(idx));
-            line_parts.get(idx).and_then(|s: &&str| s.trim().parse::<i32>().ok()).unwrap_or(-1)
-        };
-
-        let mut raw = Self {
-            hitpoints: get_int(0),
-            knockbacks: get_int(1),
-            speed: get_int(2),
-            attack_1: get_int(3),
-            attack_cooldown: get_int(4) * 2,
-            standing_range: get_int(5),
-            eoc1_cost: get_int(6),
-            cooldown: get_int(7) * 2,
-            hitbox_position: get_int(8),
-            hitbox_width: get_int(9),
-            target_red: get_int(10),
-            unused: get_int(11),
-            area_attack: get_int(12),
-            time_until_attack_1: get_int(13),
-            minimum_z_layer: get_int(14),
-            maximum_z_layer: get_int(15),
-            target_floating: get_int(16),
-            target_dark: get_int(17),
-            target_metal: get_int(18),
-            target_traitless: get_int(19),
-            target_angel: get_int(20),
-            target_alien: get_int(21),
-            target_zombie: get_int(22),
-            strong_against: get_int(23),
-            knockback_chance: get_int(24),
-            freeze_chance: get_int(25),
-            freeze_duration: get_int(26),
-            slow_chance: get_int(27),
-            slow_duration: get_int(28),
-            resist: get_int(29),
-            massive_damage: get_int(30),
-            critical_chance: get_int(31),
-            attack_only: get_int(32),
-            double_bounty: get_int(33),
-            base_destroyer: get_int(34),
-            wave_chance: get_int(35),
-            wave_level: get_int(36),
-            weaken_chance: get_int(37),
-            weaken_duration: get_int(38),
-            weaken_to: get_int(39),
-            strengthen_threshold: get_int(40),
-            strengthen_boost: get_int(41),
-            survive: get_int(42),
-            metal: get_int(43),
-            long_distance_1_anchor: get_int(44),
-            long_distance_1_span: get_int(45),
-            wave_immune: get_int(46),
-            wave_block: get_int(47),
-            knockback_immune: get_int(48),
-            freeze_immune: get_int(49),
-            slow_immune: get_int(50),
-            weaken_immune: get_int(51),
-            zombie_killer: get_int(52),
-            witch_killer: get_int(53),
-            target_witch: get_int(54),
-            attack_count_total: get_int_neg(55),
-            boss_wave_immune: get_int_neg(56),
-            time_before_death: get_int_neg(57),
-            attack_count_state: get_int(58),
-            attack_2: get_int(59),
-            attack_3: get_int(60),
-            time_until_attack_2: get_int(61),
-            time_until_attack_3: get_int(62),
-            attack_1_abilities: get_int(63),
-            attack_2_abilities: get_int(64),
-            attack_3_abilities: get_int(65),
-            spawn_animation_type: get_int_neg(66),
-            soul_animation_type: get_int(67),
-            spawn_animation_flag: get_int(68),
-            soul_animation_flag: get_int(69),
-            barrier_breaker_chance: get_int(70),
-            warp_chance: get_int(71),
-            warp_duration: get_int(72),
-            warp_distance_minimum: get_int(73) / 4,
-            warp_distance_maximum: get_int(74) / 4,
-            warp_immune: get_int(75),
-            target_eva: get_int(76),
-            eva_killer: get_int(77),
-            target_relic: get_int(78),
-            curse_immune: get_int(79),
-            insanely_tough: get_int(80),
-            insane_damage: get_int(81),
-            savage_blow_chance: get_int(82),
-            savage_blow_boost: get_int(83),
-            dodge_chance: get_int(84),
-            dodge_duration: get_int(85),
-            surge_chance: get_int(86),
-            surge_spawn_anchor: get_int(87) / 4,
-            surge_spawn_span: get_int(88) / 4,
-            surge_level: get_int(89),
-            toxic_immune: get_int(90),
-            surge_immune: get_int(91),
-            curse_chance: get_int(92),
-            curse_duration: get_int(93),
-            mini_wave_flag: get_int(94),
-            shield_pierce_chance: get_int(95),
-            target_aku: get_int(96),
-            colossus_slayer: get_int(97),
-            soulstrike: get_int(98),
-            long_distance_2_flag: get_int(99),
-            long_distance_2_anchor: get_int(100),
-            long_distance_2_span: get_int(101),
-            long_distance_3_flag: get_int(102),
-            long_distance_3_anchor: get_int(103),
-            long_distance_3_span: get_int(104),
-            behemoth_slayer: get_int(105),
-            behemoth_dodge_chance: get_int(106),
-            behemoth_dodge_duration: get_int(107),
-            mini_surge_flag: get_int(108),
-            counter_surge: get_int(109),
-            conjure_unit_id: get_int_neg(110),
-            sage_slayer: get_int(111),
-            metal_killer_percent: get_int(112),
-            explosion_chance: get_int(113),
-            explosion_spawn_anchor: get_int(114) / 4,
-            explosion_spawn_span: get_int(115) / 4,
-            explosion_immune: get_int(116),
-            has_unknown_abilities: -1,
-        };
-
-        for val in line_parts.iter().skip(max_read.get() + 1) {
-            let parsed_val = val.trim().parse::<i32>().unwrap_or(0);
-            if parsed_val != 0 && parsed_val != -1 {
-                raw.has_unknown_abilities = 1;
-                break;
-            }
-        }
-
-        Some(raw)
-    }
-
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Self>, BattleError> {
-        parse_inner(bytes.as_ref())
-    }
-}
-
-fn parse_inner(bytes: &[u8]) -> Result<Vec<Battle>, BattleError> {
-    let file_content = file::scrub(bytes);
-    let delimiter = file::detect_separator(&file_content);
-
-    let mut entries = Vec::new();
-
-    for line in file_content.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        if let Some(raw) = Battle::from_csv_line(line, delimiter) {
-            entries.push(raw);
-        }
-    }
-
-    if entries.is_empty() {
-        return Err(BattleError::EmptyFile);
-    }
-
-    Ok(entries)
+fn from_row(cols: &[&str]) -> Entity {
+    let max_read = Cell::new(0);
+    let cell = entity::reader(cols, &max_read);
+    let mut unit = Entity {
+        faction: Faction::Cat,
+        hitpoints: cell(0, 0),
+        knockbacks: cell(1, 0),
+        speed: cell(2, 0),
+        attack_1: cell(3, 0),
+        attack_cooldown: cell(4, 0) * 2,
+        standing_range: cell(5, 0),
+        eoc1_cost: cell(6, 0),
+        cooldown: cell(7, 0) * 2,
+        hitbox_position: cell(8, 0),
+        hitbox_width: cell(9, 0),
+        trait_red: cell(10, 0),
+        unused: cell(11, 0),
+        area_attack: cell(12, 0),
+        time_until_attack_1: cell(13, 0),
+        minimum_z_layer: cell(14, 0),
+        maximum_z_layer: cell(15, 0),
+        trait_floating: cell(16, 0),
+        trait_dark: cell(17, 0),
+        trait_metal: cell(18, 0),
+        trait_traitless: cell(19, 0),
+        trait_angel: cell(20, 0),
+        trait_alien: cell(21, 0),
+        trait_zombie: cell(22, 0),
+        strong_against: cell(23, 0),
+        knockback_chance: cell(24, 0),
+        freeze_chance: cell(25, 0),
+        freeze_duration: cell(26, 0),
+        slow_chance: cell(27, 0),
+        slow_duration: cell(28, 0),
+        resist: cell(29, 0),
+        massive_damage: cell(30, 0),
+        critical_chance: cell(31, 0),
+        attack_only: cell(32, 0),
+        double_bounty: cell(33, 0),
+        base_destroyer: cell(34, 0),
+        wave_chance: cell(35, 0),
+        wave_level: cell(36, 0),
+        weaken_chance: cell(37, 0),
+        weaken_duration: cell(38, 0),
+        weaken_to: cell(39, 0),
+        strengthen_threshold: cell(40, 0),
+        strengthen_boost: cell(41, 0),
+        survive: cell(42, 0),
+        is_metal: cell(43, 0),
+        long_distance_1_anchor: cell(44, 0),
+        long_distance_1_span: cell(45, 0),
+        wave_immune: cell(46, 0),
+        wave_block: cell(47, 0),
+        knockback_immune: cell(48, 0),
+        freeze_immune: cell(49, 0),
+        slow_immune: cell(50, 0),
+        weaken_immune: cell(51, 0),
+        zombie_killer: cell(52, 0),
+        witch_killer: cell(53, 0),
+        trait_witch: cell(54, 0),
+        attack_count_total: cell(55, -1),
+        boss_wave_immune: cell(56, -1),
+        time_before_death: cell(57, -1),
+        attack_count_state: cell(58, 0),
+        attack_2: cell(59, 0),
+        attack_3: cell(60, 0),
+        time_until_attack_2: cell(61, 0),
+        time_until_attack_3: cell(62, 0),
+        attack_1_abilities: cell(63, 0),
+        attack_2_abilities: cell(64, 0),
+        attack_3_abilities: cell(65, 0),
+        spawn_animation_type: cell(66, -1),
+        soul_animation_type: cell(67, 0),
+        spawn_animation_flag: cell(68, 0),
+        soul_animation_flag: cell(69, 0),
+        barrier_breaker_chance: cell(70, 0),
+        warp_chance: cell(71, 0),
+        warp_duration: cell(72, 0),
+        warp_distance_minimum: cell(73, 0) / 4,
+        warp_distance_maximum: cell(74, 0) / 4,
+        warp_immune: cell(75, 0),
+        trait_eva: cell(76, 0),
+        eva_killer: cell(77, 0),
+        trait_relic: cell(78, 0),
+        curse_immune: cell(79, 0),
+        insanely_tough: cell(80, 0),
+        insane_damage: cell(81, 0),
+        savage_blow_chance: cell(82, 0),
+        savage_blow_boost: cell(83, 0),
+        dodge_chance: cell(84, 0),
+        dodge_duration: cell(85, 0),
+        surge_chance: cell(86, 0),
+        surge_spawn_anchor: cell(87, 0) / 4,
+        surge_spawn_span: cell(88, 0) / 4,
+        surge_level: cell(89, 0),
+        toxic_immune: cell(90, 0),
+        surge_immune: cell(91, 0),
+        curse_chance: cell(92, 0),
+        curse_duration: cell(93, 0),
+        mini_wave_flag: cell(94, 0),
+        shield_pierce_chance: cell(95, 0),
+        trait_aku: cell(96, 0),
+        colossus_slayer: cell(97, 0),
+        soulstrike: cell(98, 0),
+        long_distance_2_flag: cell(99, 0),
+        long_distance_2_anchor: cell(100, 0),
+        long_distance_2_span: cell(101, 0),
+        long_distance_3_flag: cell(102, 0),
+        long_distance_3_anchor: cell(103, 0),
+        long_distance_3_span: cell(104, 0),
+        behemoth_slayer: cell(105, 0),
+        behemoth_dodge_chance: cell(106, 0),
+        behemoth_dodge_duration: cell(107, 0),
+        mini_surge_flag: cell(108, 0),
+        counter_surge: cell(109, 0),
+        conjure_unit_id: cell(110, -1),
+        sage_slayer: cell(111, 0),
+        metal_killer_percent: cell(112, 0),
+        explosion_chance: cell(113, 0),
+        explosion_spawn_anchor: cell(114, 0) / 4,
+        explosion_spawn_span: cell(115, 0) / 4,
+        explosion_immune: cell(116, 0),
+        ..Entity::default()
+    };
+    unit.has_unknown_abilities = entity::trailing_unknowns(cols, max_read.get() + 1);
+    unit
 }

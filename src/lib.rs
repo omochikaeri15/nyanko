@@ -5,6 +5,7 @@
 #[cfg(feature = "bcu")] pub mod bcu;
 #[cfg(feature = "graphics")] pub mod graphics;
 pub mod cat;
+pub mod combat;
 pub mod enemy;
 pub mod chapter;
 pub mod common;

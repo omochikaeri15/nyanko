@@ -10,11 +10,14 @@ mod skilllevel;
 mod unitbuy;
 mod unitevolve;
 mod unitexplanation;
-mod unitid;
 mod unitlevel;
+
+pub mod unitid;
 
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+
+use crate::combat::Entity;
 
 pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
 pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
@@ -22,7 +25,6 @@ pub use skilllevel::{SkillLevelError, TalentCost};
 pub use unitbuy::{UnitBuy, UnitBuyError};
 pub use unitevolve::{UnitEvolve, UnitEvolveError};
 pub use unitexplanation::{UnitExplanation, UnitExplanationError};
-pub use unitid::{Battle, BattleError};
 pub use unitlevel::{LevelCurve, LevelError};
 
 /// The comprehensive, fully-aggregated representation of a Cat unit.
@@ -47,7 +49,7 @@ pub struct Unit {
     pub descriptions: [Option<Vec<String>>; 4],
     /// The raw mechanical combat data, hitboxes, and active abilities, mapped strictly to each of the 4 forms.
     /// Missing forms evaluate to `None`.
-    pub battle: [Option<Battle>; 4],
+    pub combat: [Option<Entity>; 4],
     /// The absolute duration of the primary attack animation, parsed chronologically from the `maanim` sequence data.
     pub attack_frames: [Option<i32>; 4],
     /// The numeric IDs mapping this unit to its base and evolved egg counterparts.

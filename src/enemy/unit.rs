@@ -6,13 +6,15 @@
 
 mod enemyname;
 mod enemypicturebook;
-mod t_unit;
+
+pub mod t_unit;
 
 use serde::{Deserialize, Serialize};
 
+use crate::combat::Entity;
+
 pub use enemyname::{EnemyName, EnemyNameError};
 pub use enemypicturebook::{EnemyPictureBook, EnemyPictureBookError};
-pub use t_unit::{Battle, BattleError};
 
 /// The comprehensive, fully-aggregated representation of an Enemy unit.
 ///
@@ -36,7 +38,7 @@ pub struct Unit {
     pub description: Option<Vec<String>>,
     /// The raw mechanical combat data, hitboxes, and active abilities.
     /// Wrapped in an `Option` to gracefully handle missing or corrupted rows in the raw data matrix.
-    pub battle: Option<Battle>,
+    pub combat: Option<Entity>,
     /// The absolute duration of the primary attack animation, parsed chronologically from the `maanim` sequence data.
     pub attack_frames: Option<i32>,
 }
