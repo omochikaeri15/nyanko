@@ -3,9 +3,7 @@
 //! The engine stores these in a `unit<id>.csv` file alongside the unit's other
 //! assets, with one row per evolutionary form and no header.
 
-use std::cell::Cell;
-
-use crate::combat::{Entity, EntityError, Faction, entity};
+use crate::combat::{Column, Entity, EntityError, Faction, entity};
 
 /// Parses a per-unit Cat statistic file into one entity per evolutionary form.
 ///
@@ -24,130 +22,130 @@ pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
     entity::parse_rows(bytes.as_ref(), 0, from_row)
 }
 
+/// The column mapping this parser applies, in the order it applies it.
+///
+/// Published so a consumer can read the layout of a `unit<id>.csv` row from
+/// the parser's own table instead of restating it.
+pub const COLUMNS: &[Column] = entity::columns! {
+    hitpoints: 0;
+    knockbacks: 1;
+    speed: 2;
+    attack_1: 3;
+    attack_cooldown: 4, Double;
+    standing_range: 5;
+    eoc1_cost: 6;
+    cooldown: 7, Double;
+    hitbox_position: 8;
+    hitbox_width: 9;
+    trait_red: 10;
+    unused: 11;
+    area_attack: 12;
+    time_until_attack_1: 13;
+    minimum_z_layer: 14;
+    maximum_z_layer: 15;
+    trait_floating: 16;
+    trait_dark: 17;
+    trait_metal: 18;
+    trait_traitless: 19;
+    trait_angel: 20;
+    trait_alien: 21;
+    trait_zombie: 22;
+    strong_against: 23;
+    knockback_chance: 24;
+    freeze_chance: 25;
+    freeze_duration: 26;
+    slow_chance: 27;
+    slow_duration: 28;
+    resist: 29;
+    massive_damage: 30;
+    critical_chance: 31;
+    attack_only: 32;
+    double_bounty: 33;
+    base_destroyer: 34;
+    wave_chance: 35;
+    wave_level: 36;
+    weaken_chance: 37;
+    weaken_duration: 38;
+    weaken_to: 39;
+    strengthen_threshold: 40;
+    strengthen_boost: 41;
+    survive: 42;
+    is_metal: 43;
+    long_distance_1_anchor: 44;
+    long_distance_1_span: 45;
+    wave_immune: 46;
+    wave_block: 47;
+    knockback_immune: 48;
+    freeze_immune: 49;
+    slow_immune: 50;
+    weaken_immune: 51;
+    zombie_killer: 52;
+    witch_killer: 53;
+    trait_witch: 54;
+    attack_count_total: 55, Raw, -1;
+    boss_wave_immune: 56, Raw, -1;
+    time_before_death: 57, Raw, -1;
+    attack_count_state: 58;
+    attack_2: 59;
+    attack_3: 60;
+    time_until_attack_2: 61;
+    time_until_attack_3: 62;
+    attack_1_abilities: 63;
+    attack_2_abilities: 64;
+    attack_3_abilities: 65;
+    spawn_animation_type: 66, Raw, -1;
+    soul_animation_type: 67;
+    spawn_animation_flag: 68;
+    soul_animation_flag: 69;
+    barrier_breaker_chance: 70;
+    warp_chance: 71;
+    warp_duration: 72;
+    warp_distance_minimum: 73, Quarter;
+    warp_distance_maximum: 74, Quarter;
+    warp_immune: 75;
+    trait_eva: 76;
+    eva_killer: 77;
+    trait_relic: 78;
+    curse_immune: 79;
+    insanely_tough: 80;
+    insane_damage: 81;
+    savage_blow_chance: 82;
+    savage_blow_boost: 83;
+    dodge_chance: 84;
+    dodge_duration: 85;
+    surge_chance: 86;
+    surge_spawn_anchor: 87, Quarter;
+    surge_spawn_span: 88, Quarter;
+    surge_level: 89;
+    toxic_immune: 90;
+    surge_immune: 91;
+    curse_chance: 92;
+    curse_duration: 93;
+    mini_wave_flag: 94;
+    shield_pierce_chance: 95;
+    trait_aku: 96;
+    colossus_slayer: 97;
+    soulstrike: 98;
+    long_distance_2_flag: 99;
+    long_distance_2_anchor: 100;
+    long_distance_2_span: 101;
+    long_distance_3_flag: 102;
+    long_distance_3_anchor: 103;
+    long_distance_3_span: 104;
+    behemoth_slayer: 105;
+    behemoth_dodge_chance: 106;
+    behemoth_dodge_duration: 107;
+    mini_surge_flag: 108;
+    counter_surge: 109;
+    conjure_unit_id: 110, Raw, -1;
+    sage_slayer: 111;
+    metal_killer_percent: 112;
+    explosion_chance: 113;
+    explosion_spawn_anchor: 114, Quarter;
+    explosion_spawn_span: 115, Quarter;
+    explosion_immune: 116;
+};
+
 fn from_row(cols: &[&str]) -> Entity {
-    let max_read = Cell::new(0);
-    let cell = entity::reader(cols, &max_read);
-    let mut unit = Entity {
-        faction: Faction::Cat,
-        hitpoints: cell(0, 0),
-        knockbacks: cell(1, 0),
-        speed: cell(2, 0),
-        attack_1: cell(3, 0),
-        attack_cooldown: cell(4, 0) * 2,
-        standing_range: cell(5, 0),
-        eoc1_cost: cell(6, 0),
-        cooldown: cell(7, 0) * 2,
-        hitbox_position: cell(8, 0),
-        hitbox_width: cell(9, 0),
-        trait_red: cell(10, 0),
-        unused: cell(11, 0),
-        area_attack: cell(12, 0),
-        time_until_attack_1: cell(13, 0),
-        minimum_z_layer: cell(14, 0),
-        maximum_z_layer: cell(15, 0),
-        trait_floating: cell(16, 0),
-        trait_dark: cell(17, 0),
-        trait_metal: cell(18, 0),
-        trait_traitless: cell(19, 0),
-        trait_angel: cell(20, 0),
-        trait_alien: cell(21, 0),
-        trait_zombie: cell(22, 0),
-        strong_against: cell(23, 0),
-        knockback_chance: cell(24, 0),
-        freeze_chance: cell(25, 0),
-        freeze_duration: cell(26, 0),
-        slow_chance: cell(27, 0),
-        slow_duration: cell(28, 0),
-        resist: cell(29, 0),
-        massive_damage: cell(30, 0),
-        critical_chance: cell(31, 0),
-        attack_only: cell(32, 0),
-        double_bounty: cell(33, 0),
-        base_destroyer: cell(34, 0),
-        wave_chance: cell(35, 0),
-        wave_level: cell(36, 0),
-        weaken_chance: cell(37, 0),
-        weaken_duration: cell(38, 0),
-        weaken_to: cell(39, 0),
-        strengthen_threshold: cell(40, 0),
-        strengthen_boost: cell(41, 0),
-        survive: cell(42, 0),
-        is_metal: cell(43, 0),
-        long_distance_1_anchor: cell(44, 0),
-        long_distance_1_span: cell(45, 0),
-        wave_immune: cell(46, 0),
-        wave_block: cell(47, 0),
-        knockback_immune: cell(48, 0),
-        freeze_immune: cell(49, 0),
-        slow_immune: cell(50, 0),
-        weaken_immune: cell(51, 0),
-        zombie_killer: cell(52, 0),
-        witch_killer: cell(53, 0),
-        trait_witch: cell(54, 0),
-        attack_count_total: cell(55, -1),
-        boss_wave_immune: cell(56, -1),
-        time_before_death: cell(57, -1),
-        attack_count_state: cell(58, 0),
-        attack_2: cell(59, 0),
-        attack_3: cell(60, 0),
-        time_until_attack_2: cell(61, 0),
-        time_until_attack_3: cell(62, 0),
-        attack_1_abilities: cell(63, 0),
-        attack_2_abilities: cell(64, 0),
-        attack_3_abilities: cell(65, 0),
-        spawn_animation_type: cell(66, -1),
-        soul_animation_type: cell(67, 0),
-        spawn_animation_flag: cell(68, 0),
-        soul_animation_flag: cell(69, 0),
-        barrier_breaker_chance: cell(70, 0),
-        warp_chance: cell(71, 0),
-        warp_duration: cell(72, 0),
-        warp_distance_minimum: cell(73, 0) / 4,
-        warp_distance_maximum: cell(74, 0) / 4,
-        warp_immune: cell(75, 0),
-        trait_eva: cell(76, 0),
-        eva_killer: cell(77, 0),
-        trait_relic: cell(78, 0),
-        curse_immune: cell(79, 0),
-        insanely_tough: cell(80, 0),
-        insane_damage: cell(81, 0),
-        savage_blow_chance: cell(82, 0),
-        savage_blow_boost: cell(83, 0),
-        dodge_chance: cell(84, 0),
-        dodge_duration: cell(85, 0),
-        surge_chance: cell(86, 0),
-        surge_spawn_anchor: cell(87, 0) / 4,
-        surge_spawn_span: cell(88, 0) / 4,
-        surge_level: cell(89, 0),
-        toxic_immune: cell(90, 0),
-        surge_immune: cell(91, 0),
-        curse_chance: cell(92, 0),
-        curse_duration: cell(93, 0),
-        mini_wave_flag: cell(94, 0),
-        shield_pierce_chance: cell(95, 0),
-        trait_aku: cell(96, 0),
-        colossus_slayer: cell(97, 0),
-        soulstrike: cell(98, 0),
-        long_distance_2_flag: cell(99, 0),
-        long_distance_2_anchor: cell(100, 0),
-        long_distance_2_span: cell(101, 0),
-        long_distance_3_flag: cell(102, 0),
-        long_distance_3_anchor: cell(103, 0),
-        long_distance_3_span: cell(104, 0),
-        behemoth_slayer: cell(105, 0),
-        behemoth_dodge_chance: cell(106, 0),
-        behemoth_dodge_duration: cell(107, 0),
-        mini_surge_flag: cell(108, 0),
-        counter_surge: cell(109, 0),
-        conjure_unit_id: cell(110, -1),
-        sage_slayer: cell(111, 0),
-        metal_killer_percent: cell(112, 0),
-        explosion_chance: cell(113, 0),
-        explosion_spawn_anchor: cell(114, 0) / 4,
-        explosion_spawn_span: cell(115, 0) / 4,
-        explosion_immune: cell(116, 0),
-        ..Entity::default()
-    };
-    unit.has_unknown_abilities = entity::trailing_unknowns(cols, max_read.get() + 1);
-    unit
+    entity::build(cols, Faction::Cat, COLUMNS)
 }

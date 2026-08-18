@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::error;
 use std::fmt;
 
@@ -364,29 +363,141 @@ impl Entity {
     }
 }
 
-pub(crate) fn reader<'a>(cols: &'a [&'a str], max_read: &'a Cell<usize>) -> impl Fn(usize, i32) -> i32 + 'a {
-    move |index, fallback| {
-        max_read.set(max_read.get().max(index));
-        cols.get(index).and_then(|s| s.trim().parse::<i32>().ok()).unwrap_or(fallback)
+/// The arithmetic a raw column value passes through on its way into an [`Entity`] field.
+///
+/// The engine stores some values in units the rest of the crate does not use:
+/// a few durations are recorded at half their frame count, and several
+/// distances are quadrupled. The conversion is part of a column's definition
+/// rather than of the field it lands in, since the same field may be scaled in
+/// one faction's layout and raw in the other's.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Scale {
+    /// The column is stored exactly as it is read.
+    #[default]
+    Raw,
+    /// The column is doubled, converting a half-frame duration into frames.
+    Double,
+    /// The column is divided by four, converting a quadrupled distance into engine units.
+    Quarter,
+}
+
+impl Scale {
+    /// Applies the conversion to one raw column value.
+    ///
+    /// # Arguments
+    /// * `value` - The integer read from the column, or the column's default when it was absent or unparseable.
+    ///
+    /// # Returns
+    /// An `i32` holding the converted value.
+    pub const fn apply(self, value: i32) -> i32 {
+        match self {
+            Self::Raw => value,
+            Self::Double => value.saturating_mul(2),
+            Self::Quarter => value / 4,
+        }
     }
 }
 
-pub(crate) fn trailing_unknowns(cols: &[&str], start: usize) -> i32 {
+/// The definition of one column of a faction's raw statistic row.
+///
+/// A layout's full column mapping is published as a slice of these, so a
+/// consumer needing to know which index feeds which field, how it is scaled, or
+/// what it falls back to can read that from the same table the parser itself
+/// runs on, rather than mirroring the parser by hand.
+///
+/// The tables are [`crate::cat::unitid::COLUMNS`] and
+/// [`crate::enemy::t_unit::COLUMNS`]. Columns are listed in the order the
+/// parser applies them, and the highest [`Column::index`] in a table is the
+/// last column that layout understands; anything beyond it is what
+/// [`Entity::has_unknown_abilities`] reports on.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Column {
+    /// The name of the [`Entity`] field this column populates, matching its serialized key.
+    pub field: &'static str,
+    /// The zero-based position of this column within the raw row.
+    pub index: usize,
+    /// The conversion applied to the raw value before it is stored.
+    pub scale: Scale,
+    /// The value used when the column is absent from the row or does not parse as an integer.
+    pub default: i32,
+    #[serde(skip)]
+    store: fn(&mut Entity, i32),
+}
+
+impl Column {
+    pub(crate) const fn new(
+        field: &'static str,
+        index: usize,
+        scale: Scale,
+        default: i32,
+        store: fn(&mut Entity, i32),
+    ) -> Self {
+        Self { field, index, scale, default, store }
+    }
+}
+
+macro_rules! columns {
+    ($($field:ident : $index:literal $(, $scale:ident $(, $default:literal)?)?);* $(;)?) => {
+        &[$($crate::combat::entity::Column::new(
+            stringify!($field),
+            $index,
+            $crate::combat::entity::columns!(@scale $($scale)?),
+            $crate::combat::entity::columns!(@default $($($default)?)?),
+            |unit, value| unit.$field = value,
+        )),*]
+    };
+    (@scale) => { $crate::combat::entity::Scale::Raw };
+    (@scale $scale:ident) => { $crate::combat::entity::Scale::$scale };
+    (@default) => { 0 };
+    (@default $default:literal) => { $default };
+}
+
+pub(crate) use columns;
+
+pub(crate) fn build(cols: &[&str], faction: Faction, columns: &[Column]) -> Entity {
+    let mut unit = Entity { faction, ..Entity::default() };
+    let mut widest = 0;
+
+    for column in columns {
+        widest = widest.max(column.index);
+        let raw = cols
+            .get(column.index)
+            .and_then(|value| value.trim().parse::<i32>().ok())
+            .unwrap_or(column.default);
+        (column.store)(&mut unit, column.scale.apply(raw));
+    }
+
+    unit.has_unknown_abilities = trailing_unknowns(cols, widest + 1);
+    unit
+}
+
+fn trailing_unknowns(cols: &[&str], start: usize) -> i32 {
     i32::from(cols.iter().skip(start).any(|col| {
         let value = col.trim().parse::<i32>().unwrap_or(0);
         value != 0 && value != -1
     }))
 }
 
-pub(crate) fn parse_rows(bytes: &[u8], skip: usize, build: fn(&[&str]) -> Entity) -> Result<Vec<Entity>, EntityError> {
+fn split_row(line: &str, separator: char) -> Vec<&str> {
+    let body = line.split_once("//").map_or(line, |(head, _)| head).trim_end();
+    let mut cols: Vec<&str> = body.split(separator).collect();
+
+    while cols.last().is_some_and(|col| col.trim().is_empty()) {
+        cols.pop();
+    }
+
+    cols
+}
+
+pub(crate) fn parse_rows(bytes: &[u8], skip: usize, from_row: fn(&[&str]) -> Entity) -> Result<Vec<Entity>, EntityError> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
     let entities: Vec<Entity> = content
         .lines()
         .skip(skip)
         .filter_map(|line| {
-            let cols: Vec<&str> = line.split(separator).collect();
-            (cols.len() >= 10).then(|| build(&cols))
+            let cols = split_row(line, separator);
+            (cols.len() >= 10).then(|| from_row(&cols))
         })
         .collect();
     if entities.is_empty() {
@@ -395,13 +506,80 @@ pub(crate) fn parse_rows(bytes: &[u8], skip: usize, build: fn(&[&str]) -> Entity
     Ok(entities)
 }
 
-pub(crate) fn parse_single(bytes: &[u8], skip: usize, id: usize, build: fn(&[&str]) -> Entity) -> Option<Entity> {
+pub(crate) fn parse_single(bytes: &[u8], skip: usize, id: usize, from_row: fn(&[&str]) -> Entity) -> Option<Entity> {
     let content = file::scrub(bytes);
     let separator = file::detect_separator(&content);
     let target_line = content.lines().skip(skip).nth(id)?;
-    let cols: Vec<&str> = target_line.split(separator).collect();
+    let cols = split_row(target_line, separator);
     if cols.len() < 10 {
         return None;
     }
-    Some(build(&cols))
+    Some(from_row(&cols))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{cat::unitid, enemy::t_unit};
+
+    use super::*;
+
+    const NARROW_ROW: &str = "100,1,10,50,20,300,75,60,0,120";
+
+    #[test]
+    fn split_row_drops_the_comment_and_trailing_blanks() {
+        assert_eq!(split_row("1,2,3, // ねこ占い師", ','), ["1", "2", "3"]);
+        assert_eq!(split_row("1,2,3\t//ネコ杏子", ','), ["1", "2", "3"]);
+        assert_eq!(split_row("1,2,3 // ちびタンクネコ", ','), ["1", "2", "3"]);
+        assert_eq!(split_row("1,,3,,", ','), ["1", "", "3"]);
+    }
+
+    #[test]
+    fn comments_never_reach_the_columns() {
+        let expected = unitid::parse(NARROW_ROW).unwrap();
+
+        for shape in [
+            format!("{NARROW_ROW}, // ねこ占い師"),
+            format!("{NARROW_ROW}\t//ネコ杏子"),
+            format!("{NARROW_ROW} // ちびタンクネコ"),
+        ] {
+            assert_eq!(unitid::parse(&shape).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn a_value_glued_to_a_comment_survives() {
+        let forms = unitid::parse(format!("{NARROW_ROW},5 // my note")).unwrap();
+        assert_eq!(forms[0].trait_red, 5);
+    }
+
+    #[test]
+    fn column_tables_cover_every_index_once() {
+        for table in [unitid::COLUMNS, t_unit::COLUMNS] {
+            let mut indices: Vec<usize> = table.iter().map(|column| column.index).collect();
+            indices.sort_unstable();
+            indices.dedup();
+            assert_eq!(indices.len(), table.len());
+            assert_eq!(indices.last().copied(), Some(table.len() - 1));
+
+            let mut fields: Vec<&str> = table.iter().map(|column| column.field).collect();
+            fields.sort_unstable();
+            fields.dedup();
+            assert_eq!(fields.len(), table.len());
+        }
+    }
+
+    #[test]
+    fn every_column_reaches_the_field_it_names() {
+        for (table, faction) in [(unitid::COLUMNS, Faction::Cat), (t_unit::COLUMNS, Faction::Enemy)] {
+            for column in table {
+                let mut cols = vec!["0"; table.len()];
+                cols[column.index] = "8";
+
+                let serialized = serde_json::to_value(build(&cols, faction, table)).unwrap();
+                let stored = serialized.get(column.field).and_then(serde_json::Value::as_i64);
+
+                assert_eq!(stored, Some(i64::from(column.scale.apply(8))), "{}", column.field);
+            }
+        }
+    }
 }

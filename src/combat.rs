@@ -4,9 +4,13 @@
 //! properties, laid out differently in their respective source files. This
 //! module holds the unified [`Entity`] both are parsed into, along with the
 //! registry that recognizes which abilities a given entity carries.
+//!
+//! Each layout publishes its own column mapping as a slice of [`Column`], so a
+//! consumer needing to know which raw index feeds which field can read the
+//! parser's own table rather than restating it.
 
 mod abilities;
 pub(crate) mod entity;
 
 pub use abilities::{Ability, AttrUnit, AttrValue, Attribute, Identity, REGISTRY, get_ability, get_talent};
-pub use entity::{Entity, EntityError, Faction};
+pub use entity::{Column, Entity, EntityError, Faction, Scale};
