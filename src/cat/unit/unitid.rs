@@ -96,7 +96,7 @@ pub const COLUMNS: &[Column] = entity::columns! {
     spawn_animation_type: 66, Raw, -1;
     soul_animation_type: 67;
     spawn_animation_flag: 68;
-    soul_animation_flag: 69;
+    use_gudetama_soul: 69;
     barrier_breaker_chance: 70;
     warp_chance: 71;
     warp_duration: 72;

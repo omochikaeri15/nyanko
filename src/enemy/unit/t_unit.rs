@@ -110,7 +110,7 @@ pub const COLUMNS: &[Column] = entity::columns! {
     attack_2_abilities: 60;
     attack_3_abilities: 61;
     spawn_animation_flag: 62;
-    soul_animation_flag: 63;
+    use_gudetama_soul: 63;
     barrier_hitpoints: 64;
     warp_chance: 65;
     warp_duration: 66;

@@ -145,7 +145,7 @@ pub struct Entity {
     /// Non-zero when the spawn animation is enabled for this entity.
     pub spawn_animation_flag: i32,
     /// Non-zero when the death animation is enabled for this entity.
-    pub soul_animation_flag: i32,
+    pub use_gudetama_soul: i32,
     /// Non-zero when the entity may only attack and cannot block advancing opponents.
     pub attack_only: i32,
     /// The damage multiplier applied against the traits this entity is strong against.
