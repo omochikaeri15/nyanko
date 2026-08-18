@@ -4,6 +4,7 @@
 //! carrying two header lines, with one row per enemy in identifier order.
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
+use crate::common::tools::columns;
 
 const HEADER_LINES: usize = 2;
 
@@ -46,7 +47,7 @@ pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Entity> {
 /// Published so a consumer can read the layout of a `t_unit.csv` row from the
 /// parser's own table instead of restating it. The Conjure identifier has no
 /// column in this layout and is always the absent sentinel of negative one.
-pub const COLUMNS: &[Column] = entity::columns! {
+pub const COLUMNS: &[Column] = columns::columns! {
     hitpoints: 0;
     knockbacks: 1;
     speed: 2;

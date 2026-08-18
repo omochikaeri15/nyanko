@@ -21,7 +21,7 @@ use crate::combat::{Entity, EntityError};
 pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
 pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
 pub use skilllevel::{SkillLevelError, TalentCost};
-pub use unitbuy::{UnitBuy, UnitBuyError};
+pub use unitbuy::{EvolveMaterial, UnitBuy, UnitBuyError};
 pub use unitevolve::{UnitEvolve, UnitEvolveError};
 pub use unitexplanation::{UnitExplanation, UnitExplanationError};
 pub use unitlevel::{LevelCurve, LevelError};

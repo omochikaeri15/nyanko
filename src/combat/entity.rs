@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
 
 /// Represents errors that can occur while parsing raw combat statistic rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -363,111 +363,25 @@ impl Entity {
     }
 }
 
-/// The arithmetic a raw column value passes through on its way into an [`Entity`] field.
+/// The column mapping of one of the raw statistic layouts.
 ///
-/// The engine stores some values in units the rest of the crate does not use:
-/// a few durations are recorded at half their frame count, and several
-/// distances are quadrupled. The conversion is part of a column's definition
-/// rather than of the field it lands in, since the same field may be scaled in
-/// one faction's layout and raw in the other's.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Scale {
-    /// The column is stored exactly as it is read.
-    #[default]
-    Raw,
-    /// The column is doubled, converting a half-frame duration into frames.
-    Double,
-    /// The column is divided by four, converting a quadrupled distance into engine units.
-    Quarter,
-}
-
-impl Scale {
-    /// Applies the conversion to one raw column value.
-    ///
-    /// # Arguments
-    /// * `value` - The integer read from the column, or the column's default when it was absent or unparseable.
-    ///
-    /// # Returns
-    /// An `i32` holding the converted value.
-    pub const fn apply(self, value: i32) -> i32 {
-        match self {
-            Self::Raw => value,
-            Self::Double => value.saturating_mul(2),
-            Self::Quarter => value / 4,
-        }
-    }
-}
-
-/// The definition of one column of a faction's raw statistic row.
-///
-/// A layout's full column mapping is published as a slice of these, so a
-/// consumer needing to know which index feeds which field, how it is scaled, or
-/// what it falls back to can read that from the same table the parser itself
-/// runs on, rather than mirroring the parser by hand.
+/// A layout's full mapping is published as a slice of these, so a consumer
+/// needing to know which index feeds which field, how it is scaled, or what it
+/// falls back to can read that from the same table the parser itself runs on,
+/// rather than mirroring the parser by hand.
 ///
 /// The tables are [`crate::cat::unitid::COLUMNS`] and
 /// [`crate::enemy::t_unit::COLUMNS`]. Columns are listed in the order the
-/// parser applies them, and the highest [`Column::index`] in a table is the
-/// last column that layout understands; anything beyond it is what
+/// parser applies them, and the highest [`columns::Column::index`] in a table
+/// is the last column that layout understands; anything beyond it is what
 /// [`Entity::has_unknown_abilities`] reports on.
-#[derive(Debug, Clone, Copy, Serialize)]
-pub struct Column {
-    /// The name of the [`Entity`] field this column populates, matching its serialized key.
-    pub field: &'static str,
-    /// The zero-based position of this column within the raw row.
-    pub index: usize,
-    /// The conversion applied to the raw value before it is stored.
-    pub scale: Scale,
-    /// The value used when the column is absent from the row or does not parse as an integer.
-    pub default: i32,
-    #[serde(skip)]
-    store: fn(&mut Entity, i32),
-}
+pub type Column = columns::Column<Entity>;
 
-impl Column {
-    pub(crate) const fn new(
-        field: &'static str,
-        index: usize,
-        scale: Scale,
-        default: i32,
-        store: fn(&mut Entity, i32),
-    ) -> Self {
-        Self { field, index, scale, default, store }
-    }
-}
-
-macro_rules! columns {
-    ($($field:ident : $index:literal $(, $scale:ident $(, $default:literal)?)?);* $(;)?) => {
-        &[$($crate::combat::entity::Column::new(
-            stringify!($field),
-            $index,
-            $crate::combat::entity::columns!(@scale $($scale)?),
-            $crate::combat::entity::columns!(@default $($($default)?)?),
-            |unit, value| unit.$field = value,
-        )),*]
-    };
-    (@scale) => { $crate::combat::entity::Scale::Raw };
-    (@scale $scale:ident) => { $crate::combat::entity::Scale::$scale };
-    (@default) => { 0 };
-    (@default $default:literal) => { $default };
-}
-
-pub(crate) use columns;
-
-pub(crate) fn build(cols: &[&str], faction: Faction, columns: &[Column]) -> Entity {
+pub(crate) fn build(cols: &[&str], faction: Faction, table: &[Column]) -> Entity {
     let mut unit = Entity { faction, ..Entity::default() };
-    let mut widest = 0;
+    let past_table = columns::apply(cols, table, &mut unit);
 
-    for column in columns {
-        widest = widest.max(column.index);
-        let raw = cols
-            .get(column.index)
-            .and_then(|value| value.trim().parse::<i32>().ok())
-            .unwrap_or(column.default);
-        (column.store)(&mut unit, column.scale.apply(raw));
-    }
-
-    unit.has_unknown_abilities = trailing_unknowns(cols, widest + 1);
+    unit.has_unknown_abilities = trailing_unknowns(cols, past_table);
     unit
 }
 

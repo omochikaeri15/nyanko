@@ -1,4 +1,4 @@
-//! Per-stage cost, music, and reward metadata.
+//! Map-wide and per-stage cost, music, and reward metadata.
 
 use std::fmt;
 
@@ -26,6 +26,70 @@ impl fmt::Display for MapStageDataError {
 }
 
 impl std::error::Error for MapStageDataError {}
+
+/// How a stage charges its entry cost.
+///
+/// The raw column is a flag, so a named variant each keeps the two schemes
+/// distinguishable at the call site and leaves room for further schemes.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum CostType {
+    /// The stage charges the entry cost as energy directly.
+    #[default]
+    Energy,
+    /// The stage charges an item, the entry cost converting into a quantity of it.
+    Item,
+}
+
+/// The map-wide metadata carried by the two rows above a map's stage table.
+///
+/// The raw rows grew columns over the game's lifetime, so a file may stop short
+/// of the full layout. A column the file omits keeps the value the engine
+/// assumes in its absence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MapStageDataHeader {
+    /// The map number the engine files this map under.
+    pub map_number: i32,
+    /// A column present in the raw data whose effect on the engine is not established.
+    pub unknown_1: i32,
+    /// A column present in the raw data whose effect on the engine is not established.
+    pub unknown_2: i32,
+    /// The identifier of the map-wide clear condition, or negative one when there is none.
+    pub map_condition: i32,
+    /// The identifier of the per-stage clear condition, or negative one when there is none.
+    pub stage_condition: i32,
+    /// The user rank that must be reached before the map appears.
+    pub user_rank_threshold: i32,
+    /// How the stages of this map charge their entry cost.
+    pub cost_type: CostType,
+    /// Any trailing columns beyond the known layout, retained for forward compatibility.
+    ///
+    /// A column that does not read as an integer is held as `None` rather than
+    /// discarded, so an element's index is always its offset past the known layout.
+    pub rest: Vec<Option<i32>>,
+    /// The map pattern declared by the second metadata row.
+    pub map_pattern: i32,
+}
+
+impl Default for MapStageDataHeader {
+    /// Produces the metadata the engine assumes when a file declares none.
+    ///
+    /// The identifier fields hold negative one rather than zero, matching the
+    /// sentinel the raw columns use for an absent reference.
+    fn default() -> Self {
+        Self {
+            map_number: -1,
+            unknown_1: -1,
+            unknown_2: -1,
+            map_condition: -1,
+            stage_condition: -1,
+            user_rank_threshold: 0,
+            cost_type: CostType::Energy,
+            rest: Vec::new(),
+            map_pattern: 0,
+        }
+    }
+}
 
 /// One possible item reward from clearing a stage.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,8 +136,12 @@ pub enum RewardStructure {
 /// The metadata describing a single stage's cost, music, and rewards.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapStageDataEntry {
-    /// The energy consumed by attempting the stage.
-    pub energy: u32,
+    /// The cost of attempting the stage, in energy unless the stage's chapter or
+    /// this map's metadata packs a currency into it.
+    ///
+    /// Decode a packed value with [`catamin_cost`](super::catamin_cost) or
+    /// [`item_cost`](super::item_cost) according to which scheme applies.
+    pub cost: u32,
     /// The experience awarded for clearing the stage.
     pub xp: u32,
     /// The identifier of the music track played from the start of the stage.
@@ -89,6 +157,8 @@ pub struct MapStageDataEntry {
 /// The parsed contents of a map's stage metadata file.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapStageData {
+    /// The map-wide metadata the file declares above its stage table.
+    pub header: MapStageDataHeader,
     /// The per-stage metadata in stage order, so an entry's position is its stage index.
     pub entries: Vec<MapStageDataEntry>,
 }
@@ -96,8 +166,8 @@ pub struct MapStageData {
 impl MapStageData {
     /// Parses a map's stage metadata file into per-stage entries.
     ///
-    /// The leading header rows are consumed first, after which each row is one
-    /// stage in play order. The reward columns read as either a treasure pool or
+    /// The two leading metadata rows are read into the header first, after which
+    /// each row is one stage in play order. The reward columns read as either a treasure pool or
     /// a score ladder according to the row's declared rule.
     ///
     /// An unreadable row yields a default entry rather than being dropped, so an
@@ -118,19 +188,18 @@ fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
     let file_content = file::scrub(bytes);
     let separator_char = file::detect_separator(&file_content);
 
-    // The first two lines of map stage data files are always headers/metadata.
-    let lines_iterator = file_content.lines().skip(2);
+    let mut lines_iterator = file_content.lines();
+    let header = extract_header(
+        lines_iterator.next(),
+        lines_iterator.next(),
+        separator_char,
+    );
 
     let mut parsed: Vec<(usize, MapStageDataEntry)> = Vec::new();
     let mut has_content = false;
 
     for (stage_index, file_line) in lines_iterator.enumerate() {
-        let mut clean_line = file_line;
-        if let Some((before_comment, _)) = file_line.split_once("//") {
-            clean_line = before_comment;
-        }
-
-        let trimmed_line = clean_line.trim();
+        let trimmed_line = strip_comment(file_line).trim();
         if trimmed_line.is_empty() {
             continue;
         }
@@ -142,10 +211,10 @@ fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
             continue;
         }
 
-        let mut energy = 0;
+        let mut cost = 0;
         if let Some(val_string) = parts.first()
             && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                energy = parsed_value;
+                cost = parsed_value;
             }
 
         let mut xp = 0;
@@ -181,7 +250,7 @@ fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
         };
 
         parsed.push((stage_index, MapStageDataEntry {
-            energy,
+            cost,
             xp,
             init_track,
             bgm_change_percent,
@@ -204,7 +273,67 @@ fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
         }
     }
 
-    Ok(MapStageData { entries })
+    Ok(MapStageData { header, entries })
+}
+
+fn strip_comment(line: &str) -> &str {
+    line.split_once("//").map_or(line, |(before_comment, _)| before_comment)
+}
+
+fn extract_header(
+    first_line: Option<&str>,
+    second_line: Option<&str>,
+    separator_char: char,
+) -> MapStageDataHeader {
+    let mut header = MapStageDataHeader::default();
+
+    if let Some(line) = first_line {
+        let parts: Vec<&str> = strip_comment(line).split(separator_char).collect();
+        let get_integer = |idx: usize| -> Option<i32> {
+            parts.get(idx).and_then(|part| part.trim().parse::<i32>().ok())
+        };
+
+        if let Some(value) = get_integer(0) {
+            header.map_number = value;
+        }
+        if let Some(value) = get_integer(1) {
+            header.unknown_1 = value;
+        }
+        if let Some(value) = get_integer(2) {
+            header.unknown_2 = value;
+        }
+        if let Some(value) = get_integer(3) {
+            header.map_condition = value;
+        }
+        if let Some(value) = get_integer(4) {
+            header.stage_condition = value;
+        }
+        if let Some(value) = get_integer(5) {
+            header.user_rank_threshold = value;
+        }
+        if let Some(value) = get_integer(6) {
+            header.cost_type = match value {
+                1 => CostType::Item,
+                _ => CostType::Energy,
+            };
+        }
+
+        header.rest = parts
+            .iter()
+            .skip(7)
+            .map(|part| part.trim().parse::<i32>().ok())
+            .collect();
+    }
+
+    if let Some(line) = second_line
+        && let Some(value) = strip_comment(line)
+            .split(separator_char)
+            .next()
+            .and_then(|part| part.trim().parse::<i32>().ok()) {
+                header.map_pattern = value;
+            }
+
+    header
 }
 
 fn extract_timed_scores(parts: &[&str]) -> RewardStructure {
@@ -318,10 +447,10 @@ mod tests {
         let data = MapStageData::parse(raw).unwrap();
 
         assert_eq!(data.entries.len(), 3);
-        assert_eq!(data.entries[0].energy, 10);
+        assert_eq!(data.entries[0].cost, 10);
         assert_eq!(data.entries[0].xp, 1000);
         assert_eq!(data.entries[1], MapStageDataEntry::default());
-        assert_eq!(data.entries[2].energy, 30);
+        assert_eq!(data.entries[2].cost, 30);
         assert_eq!(data.entries[2].xp, 3000);
     }
 
@@ -331,7 +460,7 @@ mod tests {
         let data = MapStageData::parse(raw).unwrap();
 
         assert_eq!(data.entries.len(), 2);
-        assert_eq!(data.entries[1].energy, 20);
+        assert_eq!(data.entries[1].cost, 20);
     }
 
     #[test]
@@ -340,8 +469,53 @@ mod tests {
         let data = MapStageData::parse(raw).unwrap();
 
         assert_eq!(data.entries.len(), 3);
-        let energies: Vec<u32> = data.entries.iter().map(|entry| entry.energy).collect();
+        let energies: Vec<u32> = data.entries.iter().map(|entry| entry.cost).collect();
         assert_eq!(energies, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn header_columns_are_read_from_the_first_two_rows() {
+        let raw = "9,-1,-1,4,5,1600,1\n3\n10,1000,1,0,-1\n";
+        let data = MapStageData::parse(raw).unwrap();
+
+        assert_eq!(data.header.map_number, 9);
+        assert_eq!(data.header.map_condition, 4);
+        assert_eq!(data.header.stage_condition, 5);
+        assert_eq!(data.header.user_rank_threshold, 1600);
+        assert_eq!(data.header.cost_type, CostType::Item);
+        assert_eq!(data.header.map_pattern, 3);
+        assert!(data.header.rest.is_empty());
+    }
+
+    #[test]
+    fn omitted_header_columns_keep_their_engine_defaults() {
+        let raw = "19,-1,-1,-1,-1,    //comment\n1,\t//comment\n10,1000,1,0,-1\n";
+        let data = MapStageData::parse(raw).unwrap();
+
+        assert_eq!(data.header.map_number, 19);
+        assert_eq!(data.header.map_condition, -1);
+        assert_eq!(data.header.user_rank_threshold, 0);
+        assert_eq!(data.header.cost_type, CostType::Energy);
+        assert_eq!(data.header.map_pattern, 1);
+    }
+
+    #[test]
+    fn a_single_column_header_still_parses() {
+        let raw = "21,\t//comment\n0\n10,1000,1,0,-1\n";
+        let data = MapStageData::parse(raw).unwrap();
+
+        assert_eq!(data.header.map_number, 21);
+        assert_eq!(data.header.unknown_1, -1);
+        assert_eq!(data.header.stage_condition, -1);
+        assert_eq!(data.entries.len(), 1);
+    }
+
+    #[test]
+    fn trailing_header_columns_keep_their_positions() {
+        let raw = "9,-1,-1,-1,-1,0,1,,42\n0\n10,1000,1,0,-1\n";
+        let data = MapStageData::parse(raw).unwrap();
+
+        assert_eq!(data.header.rest, vec![None, Some(42)]);
     }
 
     #[test]

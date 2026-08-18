@@ -4,6 +4,7 @@
 //! assets, with one row per evolutionary form and no header.
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
+use crate::common::tools::columns;
 
 /// Parses a per-unit Cat statistic file into one entity per evolutionary form.
 ///
@@ -26,7 +27,7 @@ pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
 ///
 /// Published so a consumer can read the layout of a `unit<id>.csv` row from
 /// the parser's own table instead of restating it.
-pub const COLUMNS: &[Column] = entity::columns! {
+pub const COLUMNS: &[Column] = columns::columns! {
     hitpoints: 0;
     knockbacks: 1;
     speed: 2;

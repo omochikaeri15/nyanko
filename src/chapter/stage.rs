@@ -6,6 +6,7 @@
 mod battleground;
 mod certification_preset;
 mod charagroup;
+mod cost;
 mod difficulty_level;
 mod drop_chara;
 mod fixed_formation;
@@ -24,10 +25,11 @@ use crate::chapter::Category;
 pub use battleground::{Battleground, BattlegroundEntry, BattlegroundError, BossType, EnemyAmount};
 pub use certification_preset::{AbilityType, CannonType, CertificationPreset, CertificationPresetError, EvolutionForm, PresetAbility, PresetChara, PresetTreasure, TreasureType};
 pub use charagroup::{CharaGroup, CharaGroupEntry, CharaGroupError, CharaGroupType};
+pub use cost::{catamin_cost, item_cost, CataminCost, CataminGrade, ItemCost};
 pub use difficulty_level::{DifficultyLevel, DifficultyLevelError};
 pub use drop_chara::{DropChara, DropCharaError};
 pub use fixed_formation::{FixedFormation, FixedFormationEntry, FixedFormationError};
-pub use mapstagedata::{DropReward, MapStageData, MapStageDataEntry, MapStageDataError, RewardStructure, TimedScore};
+pub use mapstagedata::{CostType, DropReward, MapStageData, MapStageDataEntry, MapStageDataError, MapStageDataHeader, RewardStructure, TimedScore};
 pub use scatcpusetting::{ScatCpuSetting, ScatCpuSettingError};
 pub use stage_option::{StageOption, StageOptionEntry, StageOptionError};
 pub use stagename::{StageName, StageNameEntry, StageNameError};
@@ -75,8 +77,9 @@ pub struct Stage {
     pub unknown_value: u32,
     /// The enemy spawn configurations that make up the stage.
     pub enemies: Vec<BattlegroundEntry>,
-    /// The energy consumed by attempting the stage.
-    pub energy: u32,
+    /// The cost of attempting the stage, in energy unless the stage's chapter or
+    /// map metadata packs a currency into it.
+    pub cost: u32,
     /// The experience awarded for clearing the stage.
     pub xp: u32,
     /// The identifier of the music track played from the start of the stage.

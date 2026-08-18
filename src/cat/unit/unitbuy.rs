@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::Column;
 
 /// Represents errors that can occur during the parsing of unit progression data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,16 +22,68 @@ impl fmt::Display for UnitBuyError {
 
 impl std::error::Error for UnitBuyError {}
 
+/// One item slot of an evolution's material requirement.
+///
+/// The raw table reserves a fixed number of slots per evolution and leaves the
+/// unused ones filled with placeholder values, so a slot is only meaningful
+/// when it names a real item and a positive quantity. This pairs the two raw
+/// columns of one slot for the accessors that present them together; the slots
+/// themselves are stored on [`UnitBuy`] as the individual columns they are.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EvolveMaterial {
+    /// The identifier of the item the slot consumes.
+    pub item_id: i32,
+    /// The number of that item the slot consumes.
+    pub quantity: i32,
+}
+
+impl EvolveMaterial {
+    /// Reports whether the slot names a real requirement.
+    ///
+    /// # Returns
+    /// `true` when the slot holds a valid item identifier and a positive
+    /// quantity, and `false` for the placeholder an unused slot carries.
+    pub fn is_occupied(&self) -> bool {
+        self.item_id != -1 && self.quantity > 0
+    }
+}
+
 /// A unit's economic and progression parameters.
 ///
 /// Covers rarity, purchase and upgrade costs, level caps, unlock conditions, and
 /// evolution material requirements.
+///
+/// Every field is one column of the raw table, declared in the order the table
+/// declares them, so a field is always a single column and never a derived or
+/// combined value. The repeated column groups the table encodes positionally are
+/// available as assembled views through [`UnitBuy::upgrade_costs`],
+/// [`UnitBuy::true_form_material_slots`] and [`UnitBuy::ultra_form_material_slots`].
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnitBuy {
     /// The identifier of the stage that must be cleared before the unit becomes purchasable.
     pub stage_unlock_requirement: i32,
     /// The currency cost of the initial purchase.
     pub purchase_cost: i32,
+    /// The experience cost of the first ordinary level upgrade.
+    pub upgrade_cost_1: i32,
+    /// The experience cost of the second ordinary level upgrade.
+    pub upgrade_cost_2: i32,
+    /// The experience cost of the third ordinary level upgrade.
+    pub upgrade_cost_3: i32,
+    /// The experience cost of the fourth ordinary level upgrade.
+    pub upgrade_cost_4: i32,
+    /// The experience cost of the fifth ordinary level upgrade.
+    pub upgrade_cost_5: i32,
+    /// The experience cost of the sixth ordinary level upgrade.
+    pub upgrade_cost_6: i32,
+    /// The experience cost of the seventh ordinary level upgrade.
+    pub upgrade_cost_7: i32,
+    /// The experience cost of the eighth ordinary level upgrade.
+    pub upgrade_cost_8: i32,
+    /// The experience cost of the ninth ordinary level upgrade.
+    pub upgrade_cost_9: i32,
+    /// The experience cost of the tenth ordinary level upgrade.
+    pub upgrade_cost_10: i32,
     /// The identifier of the currency the purchase and upgrade costs are denominated in.
     pub currency_type: i32,
     /// The rarity tier of the unit, ordering it within the roster.
@@ -63,8 +116,48 @@ pub struct UnitBuy {
     pub ultra_form_unlock_level: i32,
     /// The experience consumed by the True form evolution.
     pub true_form_xp_cost: i32,
+    /// The identifier of the item in the first True form material slot.
+    pub true_form_material_1_id: i32,
+    /// The number of that item the first True form material slot consumes.
+    pub true_form_material_1_quantity: i32,
+    /// The identifier of the item in the second True form material slot.
+    pub true_form_material_2_id: i32,
+    /// The number of that item the second True form material slot consumes.
+    pub true_form_material_2_quantity: i32,
+    /// The identifier of the item in the third True form material slot.
+    pub true_form_material_3_id: i32,
+    /// The number of that item the third True form material slot consumes.
+    pub true_form_material_3_quantity: i32,
+    /// The identifier of the item in the fourth True form material slot.
+    pub true_form_material_4_id: i32,
+    /// The number of that item the fourth True form material slot consumes.
+    pub true_form_material_4_quantity: i32,
+    /// The identifier of the item in the fifth True form material slot.
+    pub true_form_material_5_id: i32,
+    /// The number of that item the fifth True form material slot consumes.
+    pub true_form_material_5_quantity: i32,
     /// The experience consumed by the Ultra form evolution.
     pub ultra_form_xp_cost: i32,
+    /// The identifier of the item in the first Ultra form material slot.
+    pub ultra_form_material_1_id: i32,
+    /// The number of that item the first Ultra form material slot consumes.
+    pub ultra_form_material_1_quantity: i32,
+    /// The identifier of the item in the second Ultra form material slot.
+    pub ultra_form_material_2_id: i32,
+    /// The number of that item the second Ultra form material slot consumes.
+    pub ultra_form_material_2_quantity: i32,
+    /// The identifier of the item in the third Ultra form material slot.
+    pub ultra_form_material_3_id: i32,
+    /// The number of that item the third Ultra form material slot consumes.
+    pub ultra_form_material_3_quantity: i32,
+    /// The identifier of the item in the fourth Ultra form material slot.
+    pub ultra_form_material_4_id: i32,
+    /// The number of that item the fourth Ultra form material slot consumes.
+    pub ultra_form_material_4_quantity: i32,
+    /// The identifier of the item in the fifth Ultra form material slot.
+    pub ultra_form_material_5_id: i32,
+    /// The number of that item the fifth Ultra form material slot consumes.
+    pub ultra_form_material_5_quantity: i32,
     /// The maximum level attainable through ordinary experience upgrades.
     pub level_cap_standard: i32,
     /// The maximum level attainable once Catseye items are applied.
@@ -82,7 +175,7 @@ pub struct UnitBuy {
     /// A column present in the raw data whose effect on the engine is not established.
     pub unknown_56: i32,
     /// The game version in which the unit was introduced, encoded as a packed integer.
-    pub version_added: i64,
+    pub version_added: i32,
     /// The Neko Points refunded when the unit is sold.
     pub sell_np_yield: i32,
     /// A column present in the raw data whose effect on the engine is not established.
@@ -95,14 +188,12 @@ pub struct UnitBuy {
     /// The raw egg identifier for the unit's evolved form, or negative one when it is not an egg unit.
     /// Prefer [`UnitBuy::egg_ids`] over reading this sentinel directly.
     pub egg_id_evolved: i32,
-    /// Any trailing columns beyond the known layout, retained verbatim for forward compatibility.
-    pub rest: Vec<i32>,
-    /// The experience cost of each of the ten ordinary level upgrades.
-    pub upgrade_costs: Vec<i32>,
-    /// The item identifier and quantity pairs consumed by the True form evolution.
-    pub true_form_materials: Vec<(i32, i32)>,
-    /// The item identifier and quantity pairs consumed by the Ultra form evolution.
-    pub ultra_form_materials: Vec<(i32, i32)>,
+    /// Any trailing columns beyond the known layout, retained for forward compatibility.
+    ///
+    /// A column that does not read as an integer is held as `None` rather than
+    /// discarded, so an element's index is always its offset past the known
+    /// layout regardless of what the trailing columns contain.
+    pub rest: Vec<Option<i32>>,
 }
 
 impl Default for UnitBuy {
@@ -112,12 +203,18 @@ impl Default for UnitBuy {
     /// the sentinel the raw columns use.
     fn default() -> Self {
         Self {
-            true_form_id: -1,
-            ultra_form_id: -1,
-            egg_id_normal: -1,
-            egg_id_evolved: -1,
             stage_unlock_requirement: 0,
             purchase_cost: 0,
+            upgrade_cost_1: 0,
+            upgrade_cost_2: 0,
+            upgrade_cost_3: 0,
+            upgrade_cost_4: 0,
+            upgrade_cost_5: 0,
+            upgrade_cost_6: 0,
+            upgrade_cost_7: 0,
+            upgrade_cost_8: 0,
+            upgrade_cost_9: 0,
+            upgrade_cost_10: 0,
             currency_type: 0,
             rarity: 0,
             guide_order: 0,
@@ -129,10 +226,32 @@ impl Default for UnitBuy {
             evolve_level_xp: 0,
             unknown_21: 0,
             level_cap_ch1: 0,
+            true_form_id: -1,
+            ultra_form_id: -1,
             true_form_unlock_level: 0,
             ultra_form_unlock_level: 0,
             true_form_xp_cost: 0,
+            true_form_material_1_id: 0,
+            true_form_material_1_quantity: 0,
+            true_form_material_2_id: 0,
+            true_form_material_2_quantity: 0,
+            true_form_material_3_id: 0,
+            true_form_material_3_quantity: 0,
+            true_form_material_4_id: 0,
+            true_form_material_4_quantity: 0,
+            true_form_material_5_id: 0,
+            true_form_material_5_quantity: 0,
             ultra_form_xp_cost: 0,
+            ultra_form_material_1_id: 0,
+            ultra_form_material_1_quantity: 0,
+            ultra_form_material_2_id: 0,
+            ultra_form_material_2_quantity: 0,
+            ultra_form_material_3_id: 0,
+            ultra_form_material_3_quantity: 0,
+            ultra_form_material_4_id: 0,
+            ultra_form_material_4_quantity: 0,
+            ultra_form_material_5_id: 0,
+            ultra_form_material_5_quantity: 0,
             level_cap_standard: 0,
             level_cap_catseye: 0,
             level_cap_plus: 0,
@@ -145,15 +264,87 @@ impl Default for UnitBuy {
             sell_np_yield: 0,
             unknown_59: 0,
             unknown_60: 0,
+            egg_id_normal: -1,
+            egg_id_evolved: -1,
             rest: Vec::new(),
-            upgrade_costs: Vec::new(),
-            true_form_materials: Vec::new(),
-            ultra_form_materials: Vec::new(),
         }
     }
 }
 
 impl UnitBuy {
+    /// The column mapping this parser applies, in the order it applies it.
+    ///
+    /// Published so a consumer can read the layout of a `unitbuy.csv` row from
+    /// the parser's own table instead of restating it. Every column falls back
+    /// to negative one when the row does not reach it or its text does not
+    /// parse, and columns past the table are retained in [`UnitBuy::rest`].
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        absent -1;
+        stage_unlock_requirement       : 0;
+        purchase_cost                  : 1;
+        upgrade_cost_1                 : 2;
+        upgrade_cost_2                 : 3;
+        upgrade_cost_3                 : 4;
+        upgrade_cost_4                 : 5;
+        upgrade_cost_5                 : 6;
+        upgrade_cost_6                 : 7;
+        upgrade_cost_7                 : 8;
+        upgrade_cost_8                 : 9;
+        upgrade_cost_9                 : 10;
+        upgrade_cost_10                : 11;
+        currency_type                  : 12;
+        rarity                         : 13;
+        guide_order                    : 14;
+        chapter_unlock_requirement     : 15;
+        sell_xp_yield                  : 16;
+        unknown_17                     : 17;
+        level_cap_ch2                  : 18;
+        base_max_plus_level            : 19;
+        evolve_level_xp                : 20;
+        unknown_21                     : 21;
+        level_cap_ch1                  : 22;
+        true_form_id                   : 23;
+        ultra_form_id                  : 24;
+        true_form_unlock_level         : 25;
+        ultra_form_unlock_level        : 26;
+        true_form_xp_cost              : 27;
+        true_form_material_1_id        : 28;
+        true_form_material_1_quantity  : 29;
+        true_form_material_2_id        : 30;
+        true_form_material_2_quantity  : 31;
+        true_form_material_3_id        : 32;
+        true_form_material_3_quantity  : 33;
+        true_form_material_4_id        : 34;
+        true_form_material_4_quantity  : 35;
+        true_form_material_5_id        : 36;
+        true_form_material_5_quantity  : 37;
+        ultra_form_xp_cost             : 38;
+        ultra_form_material_1_id       : 39;
+        ultra_form_material_1_quantity : 40;
+        ultra_form_material_2_id       : 41;
+        ultra_form_material_2_quantity : 42;
+        ultra_form_material_3_id       : 43;
+        ultra_form_material_3_quantity : 44;
+        ultra_form_material_4_id       : 45;
+        ultra_form_material_4_quantity : 46;
+        ultra_form_material_5_id       : 47;
+        ultra_form_material_5_quantity : 48;
+        level_cap_standard             : 49;
+        level_cap_catseye              : 50;
+        level_cap_plus                 : 51;
+        normal_evolution_y_offset      : 52;
+        evolved_evolution_y_offset     : 53;
+        true_evolution_y_offset        : 54;
+        ultra_evolution_y_offset       : 55;
+        unknown_56                     : 56;
+        version_added                  : 57;
+        sell_np_yield                  : 58;
+        unknown_59                     : 59;
+        unknown_60                     : 60;
+        egg_id_normal                  : 61;
+        egg_id_evolved                 : 62;
+    };
+
     /// Decodes the unit's egg counterparts into a pair of optional identifiers.
     ///
     /// The raw columns use negative one per element to mean the unit has no egg
@@ -170,79 +361,115 @@ impl UnitBuy {
         )
     }
 
+    /// Collects the ten ordinary level upgrade costs in table order.
+    ///
+    /// # Returns
+    /// An array holding the cost of each upgrade, the first element being the
+    /// cost of the first upgrade.
+    pub fn upgrade_costs(&self) -> [i32; 10] {
+        [
+            self.upgrade_cost_1,
+            self.upgrade_cost_2,
+            self.upgrade_cost_3,
+            self.upgrade_cost_4,
+            self.upgrade_cost_5,
+            self.upgrade_cost_6,
+            self.upgrade_cost_7,
+            self.upgrade_cost_8,
+            self.upgrade_cost_9,
+            self.upgrade_cost_10,
+        ]
+    }
+
+    /// Collects the five True form material slots in table order.
+    ///
+    /// # Returns
+    /// An array holding every slot the table reserves, unused slots included.
+    pub fn true_form_material_slots(&self) -> [EvolveMaterial; 5] {
+        [
+            EvolveMaterial {
+                item_id: self.true_form_material_1_id,
+                quantity: self.true_form_material_1_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.true_form_material_2_id,
+                quantity: self.true_form_material_2_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.true_form_material_3_id,
+                quantity: self.true_form_material_3_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.true_form_material_4_id,
+                quantity: self.true_form_material_4_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.true_form_material_5_id,
+                quantity: self.true_form_material_5_quantity,
+            },
+        ]
+    }
+
+    /// Collects the five Ultra form material slots in table order.
+    ///
+    /// # Returns
+    /// An array holding every slot the table reserves, unused slots included.
+    pub fn ultra_form_material_slots(&self) -> [EvolveMaterial; 5] {
+        [
+            EvolveMaterial {
+                item_id: self.ultra_form_material_1_id,
+                quantity: self.ultra_form_material_1_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.ultra_form_material_2_id,
+                quantity: self.ultra_form_material_2_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.ultra_form_material_3_id,
+                quantity: self.ultra_form_material_3_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.ultra_form_material_4_id,
+                quantity: self.ultra_form_material_4_quantity,
+            },
+            EvolveMaterial {
+                item_id: self.ultra_form_material_5_id,
+                quantity: self.ultra_form_material_5_quantity,
+            },
+        ]
+    }
+
+    /// Yields the True form evolution's occupied material slots in table order.
+    ///
+    /// # Returns
+    /// An iterator over the slots of [`UnitBuy::true_form_material_slots`] that
+    /// name a real item and a positive quantity.
+    pub fn true_form_materials(&self) -> impl Iterator<Item = EvolveMaterial> {
+        self.true_form_material_slots().into_iter().filter(EvolveMaterial::is_occupied)
+    }
+
+    /// Yields the Ultra form evolution's occupied material slots in table order.
+    ///
+    /// # Returns
+    /// An iterator over the slots of [`UnitBuy::ultra_form_material_slots`] that
+    /// name a real item and a positive quantity.
+    pub fn ultra_form_materials(&self) -> impl Iterator<Item = EvolveMaterial> {
+        self.ultra_form_material_slots().into_iter().filter(EvolveMaterial::is_occupied)
+    }
+
     fn from_csv_line(csv_line: &str, delimiter: char) -> Self {
-        let parts: Vec<&str> = csv_line.split(delimiter).map(|s| s.trim()).collect();
+        let parts: Vec<&str> = csv_line.split(delimiter).map(str::trim).collect();
 
-        let get_integer = |idx: usize| -> i32 {
-            parts.get(idx).and_then(|s| s.parse::<i32>().ok()).unwrap_or(-1)
-        };
+        let mut row = Self::default();
+        let past_table = columns::apply(&parts, Self::COLUMNS, &mut row);
 
-        let get_long = |idx: usize| -> i64 {
-            parts.get(idx).and_then(|s| s.parse::<i64>().ok()).unwrap_or(-1)
-        };
-
-        let parse_materials = |start_idx: usize| -> Vec<(i32, i32)> {
-            let mut material_list = Vec::new();
-            for i in 0..5 {
-                let base_idx = start_idx + (i * 2);
-                let item_id = get_integer(base_idx);
-                let item_cost = get_integer(base_idx + 1);
-                if item_id != -1 && item_cost > 0 {
-                    material_list.push((item_id, item_cost));
-                }
-            }
-            material_list
-        };
-
-        let parse_upgrades = |start_idx: usize| -> Vec<i32> {
-            (0..10).map(|i| get_integer(start_idx + i)).collect()
-        };
-
-        let rest_vector: Vec<i32> = parts
+        row.rest = parts
             .iter()
-            .skip(63)
-            .filter_map(|part| part.parse::<i32>().ok())
+            .skip(past_table)
+            .map(|part| part.parse::<i32>().ok())
             .collect();
 
-        Self {
-            stage_unlock_requirement: get_integer(0),
-            purchase_cost: get_integer(1),
-            upgrade_costs: parse_upgrades(2),
-            currency_type: get_integer(12),
-            rarity: get_integer(13),
-            guide_order: get_integer(14),
-            chapter_unlock_requirement: get_integer(15),
-            sell_xp_yield: get_integer(16),
-            unknown_17: get_integer(17),
-            level_cap_ch2: get_integer(18),
-            base_max_plus_level: get_integer(19),
-            evolve_level_xp: get_integer(20),
-            unknown_21: get_integer(21),
-            level_cap_ch1: get_integer(22),
-            true_form_id: get_integer(23),
-            ultra_form_id: get_integer(24),
-            true_form_unlock_level: get_integer(25),
-            ultra_form_unlock_level: get_integer(26),
-            true_form_xp_cost: get_integer(27),
-            true_form_materials: parse_materials(28),
-            ultra_form_xp_cost: get_integer(38),
-            ultra_form_materials: parse_materials(39),
-            level_cap_standard: get_integer(49),
-            level_cap_catseye: get_integer(50),
-            level_cap_plus: get_integer(51),
-            normal_evolution_y_offset: get_integer(52),
-            evolved_evolution_y_offset: get_integer(53),
-            true_evolution_y_offset: get_integer(54),
-            ultra_evolution_y_offset: get_integer(55),
-            unknown_56: get_integer(56),
-            version_added: get_long(57),
-            sell_np_yield: get_integer(58),
-            unknown_59: get_integer(59),
-            unknown_60: get_integer(60),
-            egg_id_normal: get_integer(61),
-            egg_id_evolved: get_integer(62),
-            rest: rest_vector,
-        }
+        row
     }
 
     /// Parses the unit progression table into rows keyed by unit identifier.
@@ -280,4 +507,244 @@ fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, UnitBuy>, UnitBuyError> {
     }
 
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const COLUMN_COUNT: usize = 63;
+
+    /// Row sixteen of a real `unitbuy.csv`, the lowest-numbered unit that fills
+    /// every True form material slot.
+    const REAL_ROW: &str = "0,0,50,100,3100,7100,12100,18100,25100,33100,42100,52100,0,1,1000150,0,999,3,20,0,-1,10,10,15017,0,30,-1,500000,31,3,32,3,34,3,43,1,164,1,0,0,0,0,0,0,0,0,0,0,0,30,50,0,0,0,0,0,2,0,1,0,0,-1,-1";
+
+    /// Every field of [`UnitBuy`] in the order its column appears in the row.
+    const FIELD_ORDER: [&str; COLUMN_COUNT] = [
+        "stage_unlock_requirement",
+        "purchase_cost",
+        "upgrade_cost_1",
+        "upgrade_cost_2",
+        "upgrade_cost_3",
+        "upgrade_cost_4",
+        "upgrade_cost_5",
+        "upgrade_cost_6",
+        "upgrade_cost_7",
+        "upgrade_cost_8",
+        "upgrade_cost_9",
+        "upgrade_cost_10",
+        "currency_type",
+        "rarity",
+        "guide_order",
+        "chapter_unlock_requirement",
+        "sell_xp_yield",
+        "unknown_17",
+        "level_cap_ch2",
+        "base_max_plus_level",
+        "evolve_level_xp",
+        "unknown_21",
+        "level_cap_ch1",
+        "true_form_id",
+        "ultra_form_id",
+        "true_form_unlock_level",
+        "ultra_form_unlock_level",
+        "true_form_xp_cost",
+        "true_form_material_1_id",
+        "true_form_material_1_quantity",
+        "true_form_material_2_id",
+        "true_form_material_2_quantity",
+        "true_form_material_3_id",
+        "true_form_material_3_quantity",
+        "true_form_material_4_id",
+        "true_form_material_4_quantity",
+        "true_form_material_5_id",
+        "true_form_material_5_quantity",
+        "ultra_form_xp_cost",
+        "ultra_form_material_1_id",
+        "ultra_form_material_1_quantity",
+        "ultra_form_material_2_id",
+        "ultra_form_material_2_quantity",
+        "ultra_form_material_3_id",
+        "ultra_form_material_3_quantity",
+        "ultra_form_material_4_id",
+        "ultra_form_material_4_quantity",
+        "ultra_form_material_5_id",
+        "ultra_form_material_5_quantity",
+        "level_cap_standard",
+        "level_cap_catseye",
+        "level_cap_plus",
+        "normal_evolution_y_offset",
+        "evolved_evolution_y_offset",
+        "true_evolution_y_offset",
+        "ultra_evolution_y_offset",
+        "unknown_56",
+        "version_added",
+        "sell_np_yield",
+        "unknown_59",
+        "unknown_60",
+        "egg_id_normal",
+        "egg_id_evolved",
+    ];
+
+    fn parse_one(line: &str) -> UnitBuy {
+        let mut rows = UnitBuy::parse(line).unwrap();
+        rows.remove(&0).unwrap()
+    }
+
+    fn fields_set_by(index: usize) -> Vec<String> {
+        let mut columns = vec!["0"; COLUMN_COUNT];
+        columns[index] = "7";
+
+        let probed = serde_json::to_value(parse_one(&columns.join(","))).unwrap();
+        let baseline = serde_json::to_value(parse_one(&vec!["0"; COLUMN_COUNT].join(","))).unwrap();
+
+        let (Some(probed), Some(baseline)) = (probed.as_object(), baseline.as_object()) else {
+            return Vec::new();
+        };
+
+        probed
+            .iter()
+            .filter(|(key, value)| baseline.get(*key) != Some(*value))
+            .map(|(key, _)| key.clone())
+            .collect()
+    }
+
+    #[test]
+    fn every_column_reaches_a_field_of_its_own() {
+        let mut reached = Vec::new();
+
+        for index in 0..COLUMN_COUNT {
+            let touched = fields_set_by(index);
+            assert_eq!(touched.len(), 1, "column {index} set {touched:?}");
+            reached.push(touched.into_iter().next().unwrap_or_default());
+        }
+
+        assert_eq!(reached, FIELD_ORDER);
+
+        reached.sort();
+        reached.dedup();
+        assert_eq!(reached.len(), COLUMN_COUNT);
+    }
+
+    #[test]
+    fn a_real_row_lands_column_for_column() {
+        let row = parse_one(REAL_ROW);
+
+        assert_eq!(row.stage_unlock_requirement, 0, "stage_unlock_requirement");
+        assert_eq!(row.purchase_cost, 0, "purchase_cost");
+        assert_eq!(row.upgrade_cost_1, 50, "upgrade_cost_1");
+        assert_eq!(row.upgrade_cost_2, 100, "upgrade_cost_2");
+        assert_eq!(row.upgrade_cost_3, 3100, "upgrade_cost_3");
+        assert_eq!(row.upgrade_cost_4, 7100, "upgrade_cost_4");
+        assert_eq!(row.upgrade_cost_5, 12100, "upgrade_cost_5");
+        assert_eq!(row.upgrade_cost_6, 18100, "upgrade_cost_6");
+        assert_eq!(row.upgrade_cost_7, 25100, "upgrade_cost_7");
+        assert_eq!(row.upgrade_cost_8, 33100, "upgrade_cost_8");
+        assert_eq!(row.upgrade_cost_9, 42100, "upgrade_cost_9");
+        assert_eq!(row.upgrade_cost_10, 52100, "upgrade_cost_10");
+        assert_eq!(row.currency_type, 0, "currency_type");
+        assert_eq!(row.rarity, 1, "rarity");
+        assert_eq!(row.guide_order, 1000150, "guide_order");
+        assert_eq!(row.chapter_unlock_requirement, 0, "chapter_unlock_requirement");
+        assert_eq!(row.sell_xp_yield, 999, "sell_xp_yield");
+        assert_eq!(row.unknown_17, 3, "unknown_17");
+        assert_eq!(row.level_cap_ch2, 20, "level_cap_ch2");
+        assert_eq!(row.base_max_plus_level, 0, "base_max_plus_level");
+        assert_eq!(row.evolve_level_xp, -1, "evolve_level_xp");
+        assert_eq!(row.unknown_21, 10, "unknown_21");
+        assert_eq!(row.level_cap_ch1, 10, "level_cap_ch1");
+        assert_eq!(row.true_form_id, 15017, "true_form_id");
+        assert_eq!(row.ultra_form_id, 0, "ultra_form_id");
+        assert_eq!(row.true_form_unlock_level, 30, "true_form_unlock_level");
+        assert_eq!(row.ultra_form_unlock_level, -1, "ultra_form_unlock_level");
+        assert_eq!(row.true_form_xp_cost, 500000, "true_form_xp_cost");
+        assert_eq!(row.true_form_material_1_id, 31, "true_form_material_1_id");
+        assert_eq!(row.true_form_material_1_quantity, 3, "true_form_material_1_quantity");
+        assert_eq!(row.true_form_material_2_id, 32, "true_form_material_2_id");
+        assert_eq!(row.true_form_material_2_quantity, 3, "true_form_material_2_quantity");
+        assert_eq!(row.true_form_material_3_id, 34, "true_form_material_3_id");
+        assert_eq!(row.true_form_material_3_quantity, 3, "true_form_material_3_quantity");
+        assert_eq!(row.true_form_material_4_id, 43, "true_form_material_4_id");
+        assert_eq!(row.true_form_material_4_quantity, 1, "true_form_material_4_quantity");
+        assert_eq!(row.true_form_material_5_id, 164, "true_form_material_5_id");
+        assert_eq!(row.true_form_material_5_quantity, 1, "true_form_material_5_quantity");
+        assert_eq!(row.ultra_form_xp_cost, 0, "ultra_form_xp_cost");
+        assert_eq!(row.ultra_form_material_1_id, 0, "ultra_form_material_1_id");
+        assert_eq!(row.ultra_form_material_1_quantity, 0, "ultra_form_material_1_quantity");
+        assert_eq!(row.ultra_form_material_2_id, 0, "ultra_form_material_2_id");
+        assert_eq!(row.ultra_form_material_2_quantity, 0, "ultra_form_material_2_quantity");
+        assert_eq!(row.ultra_form_material_3_id, 0, "ultra_form_material_3_id");
+        assert_eq!(row.ultra_form_material_3_quantity, 0, "ultra_form_material_3_quantity");
+        assert_eq!(row.ultra_form_material_4_id, 0, "ultra_form_material_4_id");
+        assert_eq!(row.ultra_form_material_4_quantity, 0, "ultra_form_material_4_quantity");
+        assert_eq!(row.ultra_form_material_5_id, 0, "ultra_form_material_5_id");
+        assert_eq!(row.ultra_form_material_5_quantity, 0, "ultra_form_material_5_quantity");
+        assert_eq!(row.level_cap_standard, 30, "level_cap_standard");
+        assert_eq!(row.level_cap_catseye, 50, "level_cap_catseye");
+        assert_eq!(row.level_cap_plus, 0, "level_cap_plus");
+        assert_eq!(row.normal_evolution_y_offset, 0, "normal_evolution_y_offset");
+        assert_eq!(row.evolved_evolution_y_offset, 0, "evolved_evolution_y_offset");
+        assert_eq!(row.true_evolution_y_offset, 0, "true_evolution_y_offset");
+        assert_eq!(row.ultra_evolution_y_offset, 0, "ultra_evolution_y_offset");
+        assert_eq!(row.unknown_56, 2, "unknown_56");
+        assert_eq!(row.version_added, 0, "version_added");
+        assert_eq!(row.sell_np_yield, 1, "sell_np_yield");
+        assert_eq!(row.unknown_59, 0, "unknown_59");
+        assert_eq!(row.unknown_60, 0, "unknown_60");
+        assert_eq!(row.egg_id_normal, -1, "egg_id_normal");
+        assert_eq!(row.egg_id_evolved, -1, "egg_id_evolved");
+        assert!(row.rest.is_empty());
+    }
+
+    #[test]
+    fn the_assembled_views_agree_with_the_raw_columns() {
+        let row = parse_one(REAL_ROW);
+
+        assert_eq!(
+            row.upgrade_costs(),
+            [50, 100, 3100, 7100, 12100, 18100, 25100, 33100, 42100, 52100]
+        );
+
+        let occupied: Vec<(i32, i32)> = row
+            .true_form_materials()
+            .map(|material| (material.item_id, material.quantity))
+            .collect();
+        assert_eq!(occupied, [(31, 3), (32, 3), (34, 3), (43, 1), (164, 1)]);
+
+        assert_eq!(row.ultra_form_materials().count(), 0);
+        assert_eq!(row.ultra_form_material_slots().len(), 5);
+    }
+
+    #[test]
+    fn trailing_columns_keep_their_positions() {
+        let mut columns = vec!["0"; COLUMN_COUNT];
+        columns.extend(["", "42", "x", "-8"]);
+
+        let row = parse_one(&columns.join(","));
+        assert_eq!(row.rest, [None, Some(42), None, Some(-8)]);
+    }
+
+    #[test]
+    fn a_short_row_falls_back_to_the_sentinel() {
+        let row = parse_one("0,0,50");
+
+        assert_eq!(row.upgrade_cost_1, 50);
+        assert_eq!(row.upgrade_cost_2, -1);
+        assert_eq!(row.egg_id_evolved, -1);
+        assert!(row.rest.is_empty());
+    }
+
+    #[test]
+    fn blank_lines_do_not_shift_unit_identifiers() {
+        let rows = UnitBuy::parse("0,100\n\n0,300\n").unwrap();
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.get(&0).map(|row| row.purchase_cost), Some(100));
+        assert_eq!(rows.get(&2).map(|row| row.purchase_cost), Some(300));
+    }
+
+    #[test]
+    fn a_file_with_no_rows_is_an_error() {
+        assert_eq!(UnitBuy::parse("\n\n").unwrap_err(), UnitBuyError::EmptyFile);
+    }
 }

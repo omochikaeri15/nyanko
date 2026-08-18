@@ -13,4 +13,5 @@ mod abilities;
 pub(crate) mod entity;
 
 pub use abilities::{Ability, AttrUnit, AttrValue, Attribute, Identity, REGISTRY, get_ability, get_talent};
-pub use entity::{Column, Entity, EntityError, Faction, Scale};
+pub use crate::common::tools::columns::Scale;
+pub use entity::{Column, Entity, EntityError, Faction};
