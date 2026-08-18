@@ -24,11 +24,10 @@ impl std::error::Error for UnitBuyError {}
 
 /// One item slot of an evolution's material requirement.
 ///
-/// The raw table reserves a fixed number of slots per evolution and leaves the
-/// unused ones filled with placeholder values, so a slot is only meaningful
-/// when it names a real item and a positive quantity. This pairs the two raw
-/// columns of one slot for the accessors that present them together; the slots
-/// themselves are stored on [`UnitBuy`] as the individual columns they are.
+/// The table reserves five slots per evolution and fills the unused ones with
+/// placeholders, so a slot counts only when it names a real item and a positive
+/// quantity. [`UnitBuy`] stores the slots as their own columns; this pairs them
+/// for the accessors that present them together.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EvolveMaterial {
     /// The identifier of the item the slot consumes.
@@ -41,8 +40,8 @@ impl EvolveMaterial {
     /// Reports whether the slot names a real requirement.
     ///
     /// # Returns
-    /// `true` when the slot holds a valid item identifier and a positive
-    /// quantity, and `false` for the placeholder an unused slot carries.
+    /// A `bool` that is true when the slot holds a valid item identifier and a
+    /// positive quantity, and false for the placeholder an unused slot carries.
     pub fn is_occupied(&self) -> bool {
         self.item_id != -1 && self.quantity > 0
     }
@@ -53,11 +52,10 @@ impl EvolveMaterial {
 /// Covers rarity, purchase and upgrade costs, level caps, unlock conditions, and
 /// evolution material requirements.
 ///
-/// Every field is one column of the raw table, declared in the order the table
-/// declares them, so a field is always a single column and never a derived or
-/// combined value. The repeated column groups the table encodes positionally are
-/// available as assembled views through [`UnitBuy::upgrade_costs`],
-/// [`UnitBuy::true_form_material_slots`] and [`UnitBuy::ultra_form_material_slots`].
+/// Every field is one column of the raw table, in the order the table declares
+/// them. The repeated column groups are available as assembled views through
+/// [`UnitBuy::upgrade_costs`], [`UnitBuy::true_form_material_slots`] and
+/// [`UnitBuy::ultra_form_material_slots`].
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnitBuy {
     /// The identifier of the stage that must be cleared before the unit becomes purchasable.
@@ -188,11 +186,10 @@ pub struct UnitBuy {
     /// The raw egg identifier for the unit's evolved form, or negative one when it is not an egg unit.
     /// Prefer [`UnitBuy::egg_ids`] over reading this sentinel directly.
     pub egg_id_evolved: i32,
-    /// Any trailing columns beyond the known layout, retained for forward compatibility.
+    /// Any trailing columns beyond the known layout, kept for forward compatibility.
     ///
     /// A column that does not read as an integer is held as `None` rather than
-    /// discarded, so an element's index is always its offset past the known
-    /// layout regardless of what the trailing columns contain.
+    /// discarded, so an element's index is always its offset past the layout.
     pub rest: Vec<Option<i32>>,
 }
 
@@ -275,9 +272,8 @@ impl UnitBuy {
     /// The column mapping this parser applies, in the order it applies it.
     ///
     /// Published so a consumer can read the layout of a `unitbuy.csv` row from
-    /// the parser's own table instead of restating it. Every column falls back
-    /// to negative one when the row does not reach it or its text does not
-    /// parse, and columns past the table are retained in [`UnitBuy::rest`].
+    /// the parser's own table instead of restating it. Every column falls back to
+    /// negative one, and columns past the table are kept in [`UnitBuy::rest`].
     pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
         absent -1;
         stage_unlock_requirement       : 0;
@@ -364,8 +360,7 @@ impl UnitBuy {
     /// Collects the ten ordinary level upgrade costs in table order.
     ///
     /// # Returns
-    /// An array holding the cost of each upgrade, the first element being the
-    /// cost of the first upgrade.
+    /// An array holding the cost of each upgrade, first upgrade first.
     pub fn upgrade_costs(&self) -> [i32; 10] {
         [
             self.upgrade_cost_1,
@@ -384,7 +379,7 @@ impl UnitBuy {
     /// Collects the five True form material slots in table order.
     ///
     /// # Returns
-    /// An array holding every slot the table reserves, unused slots included.
+    /// An array holding every slot the table reserves, unused ones included.
     pub fn true_form_material_slots(&self) -> [EvolveMaterial; 5] {
         [
             EvolveMaterial {
@@ -413,7 +408,7 @@ impl UnitBuy {
     /// Collects the five Ultra form material slots in table order.
     ///
     /// # Returns
-    /// An array holding every slot the table reserves, unused slots included.
+    /// An array holding every slot the table reserves, unused ones included.
     pub fn ultra_form_material_slots(&self) -> [EvolveMaterial; 5] {
         [
             EvolveMaterial {
@@ -443,7 +438,7 @@ impl UnitBuy {
     ///
     /// # Returns
     /// An iterator over the slots of [`UnitBuy::true_form_material_slots`] that
-    /// name a real item and a positive quantity.
+    /// name a real requirement.
     pub fn true_form_materials(&self) -> impl Iterator<Item = EvolveMaterial> {
         self.true_form_material_slots().into_iter().filter(EvolveMaterial::is_occupied)
     }
@@ -452,7 +447,7 @@ impl UnitBuy {
     ///
     /// # Returns
     /// An iterator over the slots of [`UnitBuy::ultra_form_material_slots`] that
-    /// name a real item and a positive quantity.
+    /// name a real requirement.
     pub fn ultra_form_materials(&self) -> impl Iterator<Item = EvolveMaterial> {
         self.ultra_form_material_slots().into_iter().filter(EvolveMaterial::is_occupied)
     }

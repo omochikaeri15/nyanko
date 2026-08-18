@@ -1,11 +1,8 @@
-//! Table-driven declaration of a flat delimited row's column layout.
+//! Table-driven declaration of a flat row's column layout.
 //!
-//! A parser for a flat row declares its layout once as a slice of [`Column`],
-//! built with the [`columns!`] macro, and reads a row by walking that table
-//! rather than by a hand-written run of indexed lookups. The table is then the
-//! single source of truth for the layout: it can be published so a consumer
-//! reads the mapping instead of restating it, and it makes the mapping testable
-//! rather than assumed.
+//! A parser declares its layout once as a slice of [`Column`] and reads a row by
+//! walking that table. The table can be published, so a consumer reads the
+//! mapping from the parser itself rather than restating it.
 
 use std::fmt;
 
@@ -13,11 +10,11 @@ use serde::Serialize;
 
 /// The arithmetic a raw column value passes through on its way into a field.
 ///
-/// Some engine columns are stored in units the rest of the crate does not use:
+/// The engine stores some values in units the rest of the crate does not use:
 /// a few durations are recorded at half their frame count, and several
-/// distances are quadrupled. The conversion belongs to the column rather than
-/// to the field it lands in, since one layout may scale a column that another
-/// layout stores raw.
+/// distances are quadrupled. The conversion is part of a column's definition
+/// rather than of the field it lands in, since the same field may be scaled in
+/// one layout and raw in another.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, serde::Deserialize)]
 pub enum Scale {
     /// The column is stored exactly as it is read.
@@ -46,12 +43,12 @@ impl Scale {
     }
 }
 
-/// The definition of one column of a raw row, and where it lands in `T`.
+/// The definition of one column of a raw row, and the field it lands in.
 ///
-/// A layout publishes its full mapping as a slice of these, in the order the
-/// parser applies them. The highest [`Column::index`] in a table is the last
-/// column that layout understands; anything past it is trailing data the table
-/// does not describe.
+/// A layout's full column mapping is published as a slice of these, so a
+/// consumer needing to know which index feeds which field, how it is scaled, or
+/// what it falls back to can read that from the same table the parser itself
+/// runs on, rather than mirroring the parser by hand.
 #[derive(Serialize)]
 #[serde(bound = "")]
 pub struct Column<T> {
@@ -124,7 +121,7 @@ impl<T> Column<T> {
 ///
 /// # Returns
 /// A `usize` holding the first index past the widest column the table
-/// describes, which is where a caller retaining trailing columns begins.
+/// describes, where a caller retaining trailing columns begins.
 pub fn apply<T>(row: &[&str], table: &[Column<T>], target: &mut T) -> usize {
     let mut widest = 0;
 
@@ -139,9 +136,9 @@ pub fn apply<T>(row: &[&str], table: &[Column<T>], target: &mut T) -> usize {
 /// Declares a column table as a slice of [`Column`].
 ///
 /// Each entry is `field: index`, optionally followed by a [`Scale`] variant and
-/// then the value to fall back on when the column is missing or unparseable. A
-/// table whose columns nearly all share one fallback can state it once with a
-/// leading `absent <literal>;`, which any entry may still override.
+/// then the value the column falls back to when it is missing or unparseable. A
+/// table whose columns share one fallback states it once as a leading
+/// `absent <literal>;`, which any entry may still override.
 macro_rules! columns {
     (@scale) => { $crate::common::tools::columns::Scale::Raw };
     (@scale $scale:ident) => { $crate::common::tools::columns::Scale::$scale };

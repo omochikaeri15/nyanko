@@ -1,7 +1,7 @@
 //! Parsing and geometric analysis of a unit's animation rig.
 //!
-//! This module turns the three files that define a unit's appearance — the
-//! texture atlas, its sprite cut list, and the model hierarchy — into a single
+//! A unit's appearance is defined by three files: the texture atlas, its sprite
+//! cut list, and the model hierarchy. This module turns them into a single
 //! [`Rig`], and parses the separate animation timelines that drive it.
 
 mod imgcut;

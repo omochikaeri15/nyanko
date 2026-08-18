@@ -365,15 +365,10 @@ impl Entity {
 
 /// The column mapping of one of the raw statistic layouts.
 ///
-/// A layout's full mapping is published as a slice of these, so a consumer
-/// needing to know which index feeds which field, how it is scaled, or what it
-/// falls back to can read that from the same table the parser itself runs on,
-/// rather than mirroring the parser by hand.
-///
 /// The tables are [`crate::cat::unitid::COLUMNS`] and
-/// [`crate::enemy::t_unit::COLUMNS`]. Columns are listed in the order the
-/// parser applies them, and the highest [`columns::Column::index`] in a table
-/// is the last column that layout understands; anything beyond it is what
+/// [`crate::enemy::t_unit::COLUMNS`]. Columns are listed in the order the parser
+/// applies them, and the highest [`columns::Column::index`] in a table is the
+/// last column that layout understands. Anything beyond it is what
 /// [`Entity::has_unknown_abilities`] reports on.
 pub type Column = columns::Column<Entity>;
 

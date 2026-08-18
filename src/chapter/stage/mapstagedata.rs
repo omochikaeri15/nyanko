@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::tools::file;
 
+use super::CostType;
+
 /// Represents errors that can occur during the parsing of stage metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -27,25 +29,11 @@ impl fmt::Display for MapStageDataError {
 
 impl std::error::Error for MapStageDataError {}
 
-/// How a stage charges its entry cost.
-///
-/// The raw column is a flag, so a named variant each keeps the two schemes
-/// distinguishable at the call site and leaves room for further schemes.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum CostType {
-    /// The stage charges the entry cost as energy directly.
-    #[default]
-    Energy,
-    /// The stage charges an item, the entry cost converting into a quantity of it.
-    Item,
-}
-
 /// The map-wide metadata carried by the two rows above a map's stage table.
 ///
-/// The raw rows grew columns over the game's lifetime, so a file may stop short
-/// of the full layout. A column the file omits keeps the value the engine
-/// assumes in its absence.
+/// The rows gained columns over the game's lifetime, so a file may stop short of
+/// the full layout. A column the file omits keeps the value the engine assumes
+/// in its absence.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapStageDataHeader {
     /// The map number the engine files this map under.
@@ -75,7 +63,7 @@ impl Default for MapStageDataHeader {
     /// Produces the metadata the engine assumes when a file declares none.
     ///
     /// The identifier fields hold negative one rather than zero, matching the
-    /// sentinel the raw columns use for an absent reference.
+    /// sentinel the raw columns use.
     fn default() -> Self {
         Self {
             map_number: -1,
@@ -136,11 +124,9 @@ pub enum RewardStructure {
 /// The metadata describing a single stage's cost, music, and rewards.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapStageDataEntry {
-    /// The cost of attempting the stage, in energy unless the stage's chapter or
-    /// this map's metadata packs a currency into it.
-    ///
-    /// Decode a packed value with [`catamin_cost`](super::catamin_cost) or
-    /// [`item_cost`](super::item_cost) according to which scheme applies.
+    /// The cost of attempting the stage, in energy unless the chapter or this
+    /// map's metadata packs a currency into it. Decode a packed value with
+    /// [`resolve_energy`](super::resolve_energy).
     pub cost: u32,
     /// The experience awarded for clearing the stage.
     pub xp: u32,
@@ -166,8 +152,8 @@ pub struct MapStageData {
 impl MapStageData {
     /// Parses a map's stage metadata file into per-stage entries.
     ///
-    /// The two leading metadata rows are read into the header first, after which
-    /// each row is one stage in play order. The reward columns read as either a treasure pool or
+    /// The two metadata rows are read into the header first, after which each
+    /// row is one stage in play order. The reward columns read as either a treasure pool or
     /// a score ladder according to the row's declared rule.
     ///
     /// An unreadable row yields a default entry rather than being dropped, so an
