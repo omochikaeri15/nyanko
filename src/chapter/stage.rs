@@ -80,6 +80,8 @@ pub struct Stage {
     /// The cost of attempting the stage, in energy unless the stage's chapter or
     /// map metadata packs a currency into it.
     pub cost: u32,
+    /// The cost scheme this stage's map declares, before any chapter override.
+    pub declared_cost_type: CostType,
     /// The experience awarded for clearing the stage.
     pub xp: u32,
     /// The identifier of the music track played from the start of the stage.
@@ -96,6 +98,14 @@ pub struct Stage {
     pub max_crowns: u8,
     /// The crown difficulty the lineup restrictions apply at, or negative when they apply at every difficulty.
     pub target_crowns: i8,
+    /// The enemy strength percentage applied at one crown, if the map declares it.
+    pub crown_1_mag: Option<u32>,
+    /// The enemy strength percentage applied at two crowns, if the map declares it.
+    pub crown_2_mag: Option<u32>,
+    /// The enemy strength percentage applied at three crowns, if the map declares it.
+    pub crown_3_mag: Option<u32>,
+    /// The enemy strength percentage applied at four crowns, if the map declares it.
+    pub crown_4_mag: Option<u32>,
     /// A bitmask of the rarity tiers permitted, where each bit selects one tier.
     pub rarity_mask: u8,
     /// The greatest number of units deployable at once.
@@ -110,4 +120,44 @@ pub struct Stage {
     pub charagroup: Option<CharaGroupEntry>,
     /// The predetermined lineups imposed at each crown difficulty, if any are.
     pub fixed_lineups: HashMap<u8, CertificationPreset>,
+}
+
+impl Stage {
+    /// Returns the cost scheme the stage actually charges under.
+    ///
+    /// # Returns
+    /// A `CostType` holding the scheme in effect, which is what the map declares
+    /// unless the stage's chapter overrides it.
+    pub fn cost_type(&self) -> CostType {
+        CostType::of(&self.category, self.declared_cost_type)
+    }
+
+    /// Returns the stage's entry cost decoded into the currency it charges.
+    ///
+    /// # Returns
+    /// A `ResolvedCost` holding the currency the stage charges and how much of it.
+    pub fn resolved_cost(&self) -> ResolvedCost {
+        resolve_energy(self.cost_type(), self.cost)
+    }
+
+    /// Returns the enemy strength percentage applied at a crown difficulty.
+    ///
+    /// The tiers run from one to four. A tier the map leaves undeclared, and any
+    /// tier outside that range, reads as `None`.
+    ///
+    /// # Arguments
+    /// * `crowns` - The crown difficulty the stage is being attempted at.
+    ///
+    /// # Returns
+    /// An `Option` holding the percentage the tier declares, or `None` when it
+    /// declares none.
+    pub fn crown_magnification(&self, crowns: u8) -> Option<u32> {
+        match crowns {
+            1 => self.crown_1_mag,
+            2 => self.crown_2_mag,
+            3 => self.crown_3_mag,
+            4 => self.crown_4_mag,
+            _ => None,
+        }
+    }
 }
