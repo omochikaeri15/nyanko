@@ -4,7 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::{Column, FromColumn};
 
 /// Represents errors that can occur during the parsing of map options.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,12 @@ impl From<u8> for ResetType {
     }
 }
 
+impl FromColumn for ResetType {
+    fn from_column(text: &str) -> Option<Self> {
+        text.parse::<u8>().ok().map(Self::from)
+    }
+}
+
 /// The behavioral configuration of a single map.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapOptionEntry {
@@ -88,6 +95,29 @@ pub struct MapOptionEntry {
     pub hidden_upon_clear: bool,
     /// The trailing comment text accompanying the row in the source file.
     pub comment: String,
+}
+
+impl MapOptionEntry {
+    /// The column mapping this parser applies, in the order it applies it.
+    ///
+    /// Published so a consumer can read the layout of a `Map_option.csv` row
+    /// from the parser's own table instead of restating it. The indices the
+    /// table skips carry nothing this parser reads, and
+    /// [`MapOptionEntry::comment`] is the row's trailing comment text rather
+    /// than a column.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        map_id            : 0;
+        max_crowns        : 1, Raw, 1;
+        has_abyss         : 2;
+        crown_1_mag       : 3, Raw, -1;
+        crown_2_mag       : 4, Raw, -1;
+        crown_3_mag       : 5, Raw, -1;
+        crown_4_mag       : 6, Raw, -1;
+        reset_type        : 8;
+        max_clears        : 9;
+        cooldown_minutes  : 11;
+        hidden_upon_clear : 14;
+    };
 }
 
 /// The parsed contents of the map option table.
@@ -157,54 +187,16 @@ fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
             }
         }
 
-        let get_value = |index: usize| -> Option<&str> {
-            parts.get(index).map(|s| s.trim())
+        let Some(map_id_string) = parts.first() else { continue; };
+        let Ok(map_id) = map_id_string.trim().parse::<u32>() else { continue; };
+
+        let mut entry = MapOptionEntry {
+            comment: comment_part.trim().to_string(),
+            ..MapOptionEntry::default()
         };
+        columns::apply(&parts, MapOptionEntry::COLUMNS, &mut entry);
 
-        let Some(map_id_string) = get_value(0) else { continue; };
-        let Ok(map_id) = map_id_string.parse::<u32>() else { continue; };
-
-        let max_crowns = get_value(1)
-            .and_then(|v| v.parse::<u8>().ok())
-            .unwrap_or(1);
-
-        let has_abyss = get_value(2)
-            .and_then(|v| v.parse::<u8>().ok())
-            .unwrap_or(0) == 1;
-
-        let reset_type_val = get_value(8)
-            .and_then(|v| v.parse::<u8>().ok())
-            .unwrap_or(0);
-
-        let max_clears = get_value(9)
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(0);
-
-        let cooldown_minutes = get_value(11)
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(0);
-
-        let hidden_upon_clear = get_value(14)
-            .and_then(|v| v.parse::<u8>().ok())
-            .unwrap_or(0) == 1;
-
-        entries.insert(
-            map_id,
-            MapOptionEntry {
-                map_id,
-                max_crowns,
-                has_abyss,
-                crown_1_mag: get_value(3).and_then(|val| val.parse::<u32>().ok()),
-                crown_2_mag: get_value(4).and_then(|val| val.parse::<u32>().ok()),
-                crown_3_mag: get_value(5).and_then(|val| val.parse::<u32>().ok()),
-                crown_4_mag: get_value(6).and_then(|val| val.parse::<u32>().ok()),
-                reset_type: ResetType::from(reset_type_val),
-                max_clears,
-                cooldown_minutes,
-                hidden_upon_clear,
-                comment: comment_part.trim().to_string(),
-            },
-        );
+        entries.insert(map_id, entry);
     }
 
     if !has_content {
@@ -212,4 +204,14 @@ fn parse_inner(bytes: &[u8]) -> Result<MapOption, MapOptionError> {
     }
 
     Ok(MapOption { entries })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(MapOptionEntry::COLUMNS);
+    }
 }

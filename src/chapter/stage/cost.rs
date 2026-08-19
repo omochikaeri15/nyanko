@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::chapter::Category;
+use crate::common::tools::columns::FromColumn;
 
 const CURRENCY_SCALE: u32 = 1000;
 
@@ -47,6 +48,15 @@ impl CostType {
             Category::CataminStages => Self::Catamin,
             _ => declared,
         }
+    }
+}
+
+impl FromColumn for CostType {
+    fn from_column(text: &str) -> Option<Self> {
+        text.parse::<i32>().ok().map(|flag| match flag {
+            1 => Self::Item,
+            _ => Self::Energy,
+        })
     }
 }
 

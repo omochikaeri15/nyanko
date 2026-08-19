@@ -4,7 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::Column;
 
 /// Represents errors that can occur during the parsing of stage lineup restrictions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +49,24 @@ pub struct StageOptionEntry {
     pub max_cost: u32,
     /// The identifier of the unit restriction group applied, or zero when none is.
     pub charagroup_id: u32,
+}
+
+impl StageOptionEntry {
+    /// The column mapping this parser applies, in the order it applies it.
+    ///
+    /// Published so a consumer can read the layout of a `stage_option.csv` row
+    /// from the parser's own table instead of restating it.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        map_id        : 0;
+        target_crowns : 1, Raw, -1;
+        target_stage  : 2, Raw, -1;
+        rarity_mask   : 3;
+        deploy_limit  : 4;
+        allowed_rows  : 5;
+        min_cost      : 6;
+        max_cost      : 7;
+        charagroup_id : 8;
+    };
 }
 
 /// The parsed contents of the stage lineup restriction table.
@@ -106,65 +125,8 @@ fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
         let Some(raw_map_id_str) = parts.first() else { continue; };
         let Ok(map_id) = raw_map_id_str.trim().parse::<u32>() else { continue; };
 
-        let mut target_crowns: i8 = -1;
-        if let Some(val_str) = parts.get(1)
-            && let Ok(parsed) = val_str.trim().parse::<i8>() {
-                target_crowns = parsed;
-            }
-
-        let mut target_stage: i32 = -1;
-        if let Some(val_str) = parts.get(2)
-            && let Ok(parsed) = val_str.trim().parse::<i32>() {
-                target_stage = parsed;
-            }
-
-        let mut rarity_mask: u8 = 0;
-        if let Some(val_str) = parts.get(3)
-            && let Ok(parsed) = val_str.trim().parse::<u8>() {
-                rarity_mask = parsed;
-            }
-
-        let mut deploy_limit: u32 = 0;
-        if let Some(val_str) = parts.get(4)
-            && let Ok(parsed) = val_str.trim().parse::<u32>() {
-                deploy_limit = parsed;
-            }
-
-        let mut allowed_rows: u8 = 0;
-        if let Some(val_str) = parts.get(5)
-            && let Ok(parsed) = val_str.trim().parse::<u8>() {
-                allowed_rows = parsed;
-            }
-
-        let mut min_cost: u32 = 0;
-        if let Some(val_str) = parts.get(6)
-            && let Ok(parsed) = val_str.trim().parse::<u32>() {
-                min_cost = parsed;
-            }
-
-        let mut max_cost: u32 = 0;
-        if let Some(val_str) = parts.get(7)
-            && let Ok(parsed) = val_str.trim().parse::<u32>() {
-                max_cost = parsed;
-            }
-
-        let mut charagroup_id: u32 = 0;
-        if let Some(val_str) = parts.get(8)
-            && let Ok(parsed) = val_str.trim().parse::<u32>() {
-                charagroup_id = parsed;
-            }
-
-        let entry = StageOptionEntry {
-            map_id,
-            target_crowns,
-            target_stage,
-            rarity_mask,
-            deploy_limit,
-            allowed_rows,
-            min_cost,
-            max_cost,
-            charagroup_id,
-        };
+        let mut entry = StageOptionEntry::default();
+        columns::apply(&parts, StageOptionEntry::COLUMNS, &mut entry);
 
         entries.entry(map_id).or_default().push(entry);
     }
@@ -174,4 +136,14 @@ fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
     }
 
     Ok(StageOption { entries })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(StageOptionEntry::COLUMNS);
+    }
 }

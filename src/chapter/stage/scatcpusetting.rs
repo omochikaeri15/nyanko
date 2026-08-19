@@ -3,7 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::Column;
 
 /// Represents errors that can occur during the parsing of automatic play settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +39,16 @@ pub struct ScatCpuSetting {
 }
 
 impl ScatCpuSetting {
+    /// The column mapping this parser applies, in the order it applies it.
+    ///
+    /// Published so a consumer can read the layout of a `scatcpusetting.csv` row
+    /// from the parser's own table instead of restating it.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        unknown_1                : 0;
+        super_cpu_daily_limit    : 1;
+        super_cpu_consume_amount : 2;
+    };
+
     /// Parses the automatic play settings file into its global configuration.
     ///
     /// # Arguments
@@ -73,21 +84,7 @@ fn parse_inner(bytes: &[u8]) -> Result<ScatCpuSetting, ScatCpuSettingError> {
         has_content = true;
 
         let parts: Vec<&str> = trimmed_line.split(separator_char).collect();
-
-        if let Some(val_string) = parts.first()
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                setting.unknown_1 = parsed_value;
-            }
-
-        if let Some(val_string) = parts.get(1)
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                setting.super_cpu_daily_limit = parsed_value;
-            }
-
-        if let Some(val_string) = parts.get(2)
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                setting.super_cpu_consume_amount = parsed_value;
-            }
+        columns::apply(&parts, ScatCpuSetting::COLUMNS, &mut setting);
         break;
     }
 
@@ -96,4 +93,14 @@ fn parse_inner(bytes: &[u8]) -> Result<ScatCpuSetting, ScatCpuSettingError> {
     }
 
     Ok(setting)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(ScatCpuSetting::COLUMNS);
+    }
 }

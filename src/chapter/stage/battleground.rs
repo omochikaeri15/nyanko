@@ -3,7 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::{Column, FromColumn, Scale};
 
 /// Represents errors that can occur during the parsing of a stage layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +58,12 @@ impl From<u32> for BossType {
     }
 }
 
+impl FromColumn for BossType {
+    fn from_column(text: &str) -> Option<Self> {
+        text.parse::<u32>().ok().map(Self::from)
+    }
+}
+
 /// The number of times an enemy may spawn over a stage.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum EnemyAmount {
@@ -102,6 +109,32 @@ pub struct BattlegroundEntry {
     pub is_base: bool,
 }
 
+impl BattlegroundEntry {
+    /// The column mapping this parser applies to one enemy row, in the order it
+    /// applies it.
+    ///
+    /// Published so a consumer can read the layout of the row from the parser's
+    /// own table instead of restating it. The table covers the columns that
+    /// depend on nothing but their own cell. [`BattlegroundEntry::enemy_id`],
+    /// [`BattlegroundEntry::amount`],
+    /// [`BattlegroundEntry::atk_magnification`] and
+    /// [`BattlegroundEntry::is_base`] read columns 0, 1 and 11 against other
+    /// columns of the row, so the parser derives them separately.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        start_frame   : 2, Double;
+        respawn_min   : 3, Double;
+        respawn_max   : 4, Double;
+        base_hp_perc  : 5;
+        layer_min     : 6;
+        layer_max     : 7;
+        boss_type     : 8;
+        magnification : 9, Raw, 100;
+        score         : 10;
+        time_flag     : 12;
+        kill_count    : 13;
+    };
+}
+
 /// The complete layout and enemy roster of a single stage.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Battleground {
@@ -134,6 +167,34 @@ pub struct Battleground {
 }
 
 impl Battleground {
+    /// The column mapping this parser applies to the optional leading row.
+    ///
+    /// A file that opens with a short row declares the base and the continue
+    /// rule there, and the battlefield configuration follows on the next row.
+    pub const HEADER_COLUMNS: &'static [Column<Self>] = columns::columns! {
+        base_id          : 0;
+        is_no_continues  : 1;
+    };
+
+    /// The column mapping this parser applies to the battlefield configuration row.
+    ///
+    /// [`Battleground::max_spawn`] falls back to
+    /// [`Battleground::min_spawn`] rather than to a value of its own, so its
+    /// entry declares no default and the parser supplies the fallback once the
+    /// row has been read.
+    pub const CONFIG_COLUMNS: &'static [Column<Self>] = columns::columns! {
+        width                  : 0;
+        base_hp                : 1;
+        min_spawn              : 2;
+        max_spawn              : 3, Raw, "";
+        background_id          : 4;
+        max_enemies            : 5;
+        anim_base_id           : 6;
+        time_limit             : 7;
+        is_base_indestructible : 8;
+        unknown_value          : 9;
+    };
+
     /// Parses a stage layout file into its header and enemy spawn roster.
     ///
     /// The first row declares the battlefield itself and each subsequent row
@@ -175,186 +236,77 @@ fn parse_inner(bytes: &[u8]) -> Result<Battleground, BattlegroundError> {
             has_header = true;
         }
 
-    let mut base_id = 0;
-    let mut is_no_continues = false;
+    let mut ground = Battleground::default();
 
-    let config_line = if !has_header {
-        first_line
-    } else {
-        if let Some(val_string) = first_line_parts.first()
-            && let Ok(parsed) = val_string.trim().parse::<i32>() {
-                base_id = parsed;
-            }
-        if let Some(val_string) = first_line_parts.get(1) {
-            is_no_continues = val_string.trim() == "1";
-        }
+    let config_line = if has_header {
+        columns::apply(&first_line_parts, Battleground::HEADER_COLUMNS, &mut ground);
 
         let Some(next_line) = clean_lines_iterator.next() else {
             return Err(BattlegroundError::MissingConfigLine);
         };
         next_line
+    } else {
+        first_line
     };
 
     let config_parts: Vec<&str> = config_line.split(separator_char).collect();
+    columns::apply(&config_parts, Battleground::CONFIG_COLUMNS, &mut ground);
 
-    let mut width = 0;
-    if let Some(val) = config_parts.first()
-        && let Ok(p) = val.trim().parse::<u32>() { width = p; }
-
-    let mut base_hp = 0;
-    if let Some(val) = config_parts.get(1)
-        && let Ok(p) = val.trim().parse::<u32>() { base_hp = p; }
-
-    let mut min_spawn = 0;
-    if let Some(val) = config_parts.get(2)
-        && let Ok(p) = val.trim().parse::<u32>() { min_spawn = p; }
-
-    let mut max_spawn = min_spawn;
-    if let Some(val) = config_parts.get(3)
-        && let Ok(p) = val.trim().parse::<u32>() { max_spawn = p; }
-
-    let mut background_id = 0;
-    if let Some(val) = config_parts.get(4)
-        && let Ok(p) = val.trim().parse::<u32>() { background_id = p; }
-
-    let mut max_enemies = 0;
-    if let Some(val) = config_parts.get(5)
-        && let Ok(p) = val.trim().parse::<u32>() { max_enemies = p; }
-
-    let mut anim_base_id = 0;
-    if let Some(val) = config_parts.get(6)
-        && let Ok(p) = val.trim().parse::<u32>() { anim_base_id = p; }
-
-    let mut time_limit = 0;
-    if let Some(val) = config_parts.get(7)
-        && let Ok(p) = val.trim().parse::<u32>() { time_limit = p; }
-
-    let mut is_base_indestructible = false;
-    if let Some(val) = config_parts.get(8)
-        && let Ok(p) = val.trim().parse::<u8>() {
-            is_base_indestructible = p == 1;
-        }
-
-    let mut unknown_value = 0;
-    if let Some(val) = config_parts.get(9)
-        && let Ok(p) = val.trim().parse::<u32>() { unknown_value = p; }
-
-    let mut entries = Vec::new();
+    if config_parts.get(3).and_then(|cell| cell.trim().parse::<u32>().ok()).is_none() {
+        ground.max_spawn = ground.min_spawn;
+    }
 
     for enemy_line in clean_lines_iterator {
         let enemy_parts: Vec<&str> = enemy_line.split(separator_char).collect();
 
-        let mut raw_enemy_id = 0;
-        if let Some(val) = enemy_parts.first()
-            && let Ok(p) = val.trim().parse::<u32>() { raw_enemy_id = p; }
-
+        let raw_enemy_id = read_u32(&enemy_parts, 0);
         if raw_enemy_id == 0 {
             break;
         }
 
-        let mut raw_amount = 0;
-        if let Some(val) = enemy_parts.get(1)
-            && let Ok(p) = val.trim().parse::<u32>() { raw_amount = p; }
+        let mut entry = BattlegroundEntry::default();
+        columns::apply(&enemy_parts, BattlegroundEntry::COLUMNS, &mut entry);
 
-        let mut start_frame = 0;
-        if let Some(val) = enemy_parts.get(2)
-            && let Ok(p) = val.trim().parse::<u32>() { start_frame = p * 2; }
+        entry.enemy_id = raw_enemy_id.saturating_sub(2);
+        entry.is_base = raw_enemy_id == ground.anim_base_id;
 
-        let mut respawn_min = 0;
-        if let Some(val) = enemy_parts.get(3)
-            && let Ok(p) = val.trim().parse::<u32>() { respawn_min = p * 2; }
+        let declared_amount = read_u32(&enemy_parts, 1);
+        entry.amount = if declared_amount == 0 || entry.respawn_min == 0 {
+            EnemyAmount::Infinite
+        } else {
+            EnemyAmount::Limit(declared_amount)
+        };
 
-        let mut respawn_max = 0;
-        if let Some(val) = enemy_parts.get(4)
-            && let Ok(p) = val.trim().parse::<u32>() { respawn_max = p * 2; }
+        entry.atk_magnification = columns::parse_cell::<u32>(
+            enemy_parts.get(11).copied(),
+            "0",
+            Scale::Raw,
+        )
+        .filter(|declared| *declared != 0)
+        .unwrap_or(entry.magnification);
 
-        let mut amount = if raw_amount == 0 { EnemyAmount::Infinite } else { EnemyAmount::Limit(raw_amount) };
-        if respawn_min == 0 {
-            amount = EnemyAmount::Infinite;
-        }
-
-        let mut base_hp_perc = 0;
-        if let Some(val) = enemy_parts.get(5)
-            && let Ok(p) = val.trim().parse::<u32>() { base_hp_perc = p; }
-
-        let mut layer_min = 0;
-        if let Some(val) = enemy_parts.get(6)
-            && let Ok(p) = val.trim().parse::<i32>() { layer_min = p; }
-
-        let mut layer_max = 0;
-        if let Some(val) = enemy_parts.get(7)
-            && let Ok(p) = val.trim().parse::<i32>() { layer_max = p; }
-
-        let mut boss_type_val = 0;
-        if let Some(val) = enemy_parts.get(8)
-            && let Ok(p) = val.trim().parse::<u32>() { boss_type_val = p; }
-
-        let mut mag_percent = 100;
-        if let Some(val) = enemy_parts.get(9) {
-            let trimmed = val.trim();
-            if trimmed != "."
-                && let Ok(p) = trimmed.parse::<u32>() { mag_percent = p; }
-        }
-
-        let mut score = 0;
-        if let Some(val) = enemy_parts.get(10)
-            && let Ok(p) = val.trim().parse::<u32>() { score = p; }
-
-        let mut atk_magnification = mag_percent;
-        if let Some(val) = enemy_parts.get(11)
-            && let Ok(p) = val.trim().parse::<u32>()
-                && p != 0 {
-                    atk_magnification = p;
-                }
-
-        let mut time_flag = 0;
-        if let Some(val) = enemy_parts.get(12)
-            && let Ok(p) = val.trim().parse::<u32>() { time_flag = p; }
-
-        let mut kill_count = 0;
-        if let Some(val) = enemy_parts.get(13)
-            && let Ok(p) = val.trim().parse::<u32>() { kill_count = p; }
-
-        let actual_enemy_id = raw_enemy_id.saturating_sub(2);
-
-        if actual_enemy_id == 21 && start_frame == 27000 {
+        if entry.enemy_id == 21 && entry.start_frame == 27000 {
             continue;
         }
 
-        let is_base = raw_enemy_id != 0 && raw_enemy_id == anim_base_id;
-
-        entries.push(BattlegroundEntry {
-            enemy_id: actual_enemy_id,
-            amount,
-            start_frame,
-            respawn_min,
-            respawn_max,
-            base_hp_perc,
-            layer_min,
-            layer_max,
-            boss_type: BossType::from(boss_type_val),
-            magnification: mag_percent,
-            score,
-            atk_magnification,
-            time_flag,
-            kill_count,
-            is_base,
-        });
+        ground.entries.push(entry);
     }
 
-    Ok(Battleground {
-        base_id,
-        width,
-        base_hp,
-        min_spawn,
-        max_spawn,
-        background_id,
-        max_enemies,
-        anim_base_id,
-        time_limit,
-        is_no_continues,
-        is_base_indestructible,
-        unknown_value,
-        entries,
-    })
+    Ok(ground)
+}
+
+fn read_u32(row: &[&str], index: usize) -> u32 {
+    columns::parse_cell(row.get(index).copied(), "0", Scale::Raw).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(Battleground::HEADER_COLUMNS);
+        columns::assert_one_field_per_column(Battleground::CONFIG_COLUMNS);
+        columns::assert_one_field_per_column(BattlegroundEntry::COLUMNS);
+    }
 }

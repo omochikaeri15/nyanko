@@ -4,7 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::{columns, file};
+use crate::common::tools::columns::Column;
 
 use super::CostType;
 
@@ -57,6 +58,26 @@ pub struct MapStageDataHeader {
     pub rest: Vec<Option<i32>>,
     /// The map pattern declared by the second metadata row.
     pub map_pattern: i32,
+}
+
+impl MapStageDataHeader {
+    /// The column mapping this parser applies to the first metadata row, in the
+    /// order it applies it.
+    ///
+    /// Published so a consumer can read the layout of the row from the parser's
+    /// own table instead of restating it. Columns past the table are kept in
+    /// [`MapStageDataHeader::rest`], and [`MapStageDataHeader::map_pattern`]
+    /// comes from the second row rather than from this table.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        absent -1;
+        map_number          : 0;
+        unknown_1           : 1;
+        unknown_2           : 2;
+        map_condition       : 3;
+        stage_condition     : 4;
+        user_rank_threshold : 5, Raw, 0;
+        cost_type           : 6;
+    };
 }
 
 impl Default for MapStageDataHeader {
@@ -140,6 +161,23 @@ pub struct MapStageDataEntry {
     pub rewards: RewardStructure,
 }
 
+impl MapStageDataEntry {
+    /// The column mapping this parser applies to one stage row, in the order it
+    /// applies it.
+    ///
+    /// Published so a consumer can read the layout of the row from the parser's
+    /// own table instead of restating it. Columns past the table carry
+    /// [`MapStageDataEntry::rewards`], whose shape and length depend on which
+    /// scheme the row declares, so the parser reads them separately.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        cost               : 0;
+        xp                 : 1;
+        init_track         : 2;
+        bgm_change_percent : 3;
+        boss_track         : 4;
+    };
+}
+
 /// The parsed contents of a map's stage metadata file.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapStageData {
@@ -197,52 +235,18 @@ fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
             continue;
         }
 
-        let mut cost = 0;
-        if let Some(val_string) = parts.first()
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                cost = parsed_value;
-            }
-
-        let mut xp = 0;
-        if let Some(val_string) = parts.get(1)
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                xp = parsed_value;
-            }
-
-        let mut init_track = 0;
-        if let Some(val_string) = parts.get(2)
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                init_track = parsed_value;
-            }
-
-        let mut bgm_change_percent = 0;
-        if let Some(val_string) = parts.get(3)
-            && let Ok(parsed_value) = val_string.trim().parse::<u32>() {
-                bgm_change_percent = parsed_value;
-            }
-
-        let mut boss_track = 0;
-        if let Some(val_string) = parts.get(4)
-            && let Ok(parsed_value) = val_string.trim().parse::<i16>() {
-                boss_track = parsed_value;
-            }
+        let mut entry = MapStageDataEntry::default();
+        columns::apply(&parts, MapStageDataEntry::COLUMNS, &mut entry);
 
         let is_time_reward = parts.len() > 15 && parts[8..15].iter().all(|part| part.trim() == "-2");
 
-        let rewards = if is_time_reward {
+        entry.rewards = if is_time_reward {
             extract_timed_scores(&parts)
         } else {
             extract_treasure_drops(&parts)
         };
 
-        parsed.push((stage_index, MapStageDataEntry {
-            cost,
-            xp,
-            init_track,
-            bgm_change_percent,
-            boss_track,
-            rewards,
-        }));
+        parsed.push((stage_index, entry));
     }
 
     if !has_content {
@@ -275,38 +279,11 @@ fn extract_header(
 
     if let Some(line) = first_line {
         let parts: Vec<&str> = strip_comment(line).split(separator_char).collect();
-        let get_integer = |idx: usize| -> Option<i32> {
-            parts.get(idx).and_then(|part| part.trim().parse::<i32>().ok())
-        };
-
-        if let Some(value) = get_integer(0) {
-            header.map_number = value;
-        }
-        if let Some(value) = get_integer(1) {
-            header.unknown_1 = value;
-        }
-        if let Some(value) = get_integer(2) {
-            header.unknown_2 = value;
-        }
-        if let Some(value) = get_integer(3) {
-            header.map_condition = value;
-        }
-        if let Some(value) = get_integer(4) {
-            header.stage_condition = value;
-        }
-        if let Some(value) = get_integer(5) {
-            header.user_rank_threshold = value;
-        }
-        if let Some(value) = get_integer(6) {
-            header.cost_type = match value {
-                1 => CostType::Item,
-                _ => CostType::Energy,
-            };
-        }
+        let past_table = columns::apply(&parts, MapStageDataHeader::COLUMNS, &mut header);
 
         header.rest = parts
             .iter()
-            .skip(7)
+            .skip(past_table)
             .map(|part| part.trim().parse::<i32>().ok())
             .collect();
     }
@@ -423,6 +400,17 @@ fn extract_treasure_drops(parts: &[&str]) -> RewardStructure {
 }
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn every_header_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(MapStageDataHeader::COLUMNS);
+    }
+
+    #[test]
+    fn every_entry_column_reaches_a_field_of_its_own() {
+        columns::assert_one_field_per_column(MapStageDataEntry::COLUMNS);
+    }
+
     use super::*;
 
     const HEADERS: &str = "0,0,0\n0,0,0\n";

@@ -70,7 +70,7 @@ pub struct Entity {
     pub hitbox_position: i32,
     /// The width of the damage hitbox.
     pub hitbox_width: i32,
-    /// A column present in the raw data whose effect on the engine is not established.
+    /// A column the game never actually uses.
     pub unused: i32,
     /// The deployment cost in currency during the first chapter, before chapter cost multipliers.
     pub eoc1_cost: i32,

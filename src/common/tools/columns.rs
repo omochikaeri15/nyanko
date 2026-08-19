@@ -43,6 +43,115 @@ impl Scale {
     }
 }
 
+/// A field type a column's text can be read into.
+///
+/// The implementation decides what the column's text means for the field, so a
+/// column falls back to its declared default in the field's own type rather
+/// than in a single transport type every field must be squeezed through.
+pub trait FromColumn: Sized {
+    /// Reads a column's text into this type.
+    ///
+    /// # Arguments
+    /// * `text` - The trimmed text of the column, or of the column's declared default.
+    ///
+    /// # Returns
+    /// An `Option` holding the value the text names, or `None` when it names none.
+    fn from_column(text: &str) -> Option<Self>;
+
+    /// Applies a column's conversion to a value of this type.
+    ///
+    /// # Arguments
+    /// * `scale` - The conversion the column declares.
+    ///
+    /// # Returns
+    /// The converted value, which for a type no conversion applies to is the value unchanged.
+    fn scaled(self, _scale: Scale) -> Self {
+        self
+    }
+}
+
+macro_rules! integral {
+    ($($target:ty),*) => {$(
+        impl FromColumn for $target {
+            fn from_column(text: &str) -> Option<Self> {
+                text.parse().ok()
+            }
+
+            fn scaled(self, scale: Scale) -> Self {
+                match scale {
+                    Scale::Raw => self,
+                    Scale::Double => self.saturating_mul(2),
+                    Scale::Quarter => self / 4,
+                }
+            }
+        }
+    )*};
+}
+
+macro_rules! floating {
+    ($($target:ty),*) => {$(
+        impl FromColumn for $target {
+            fn from_column(text: &str) -> Option<Self> {
+                text.parse().ok()
+            }
+
+            fn scaled(self, scale: Scale) -> Self {
+                match scale {
+                    Scale::Raw => self,
+                    Scale::Double => self * 2.0,
+                    Scale::Quarter => self / 4.0,
+                }
+            }
+        }
+    )*};
+}
+
+integral!(i8, i16, i32, i64, u8, u16, u32, u64, usize);
+floating!(f32, f64);
+
+impl FromColumn for bool {
+    fn from_column(text: &str) -> Option<Self> {
+        text.parse::<i64>().ok().map(|value| value == 1)
+    }
+}
+
+impl FromColumn for String {
+    fn from_column(text: &str) -> Option<Self> {
+        Some(text.to_owned())
+    }
+}
+
+impl<T: FromColumn> FromColumn for Option<T> {
+    fn from_column(text: &str) -> Option<Self> {
+        Some(T::from_column(text))
+    }
+
+    fn scaled(self, scale: Scale) -> Self {
+        self.map(|value| value.scaled(scale))
+    }
+}
+
+/// Reads one column's text into a field's own type.
+///
+/// The column's declared default stands in when the row does not reach the
+/// column or its text names no value, and is read in the same type by the same
+/// rules. A default that names no value either leaves the field alone.
+///
+/// # Arguments
+/// * `cell` - The raw text at the column's index, or `None` when the row stops short of it.
+/// * `default` - The text the column falls back to.
+/// * `scale` - The conversion the column declares.
+///
+/// # Returns
+/// An `Option` holding the value to store, or `None` when neither the column
+/// nor its default names one.
+pub fn parse_cell<F: FromColumn>(cell: Option<&str>, default: &str, scale: Scale) -> Option<F> {
+    cell.map(str::trim)
+        .and_then(F::from_column)
+        .or_else(|| F::from_column(default))
+        .map(|value| value.scaled(scale))
+}
+
 /// The definition of one column of a raw row, and the field it lands in.
 ///
 /// A layout's full column mapping is published as a slice of these, so a
@@ -58,10 +167,10 @@ pub struct Column<T> {
     pub index: usize,
     /// The conversion applied to the raw value before it is stored.
     pub scale: Scale,
-    /// The value used when the column is absent from the row or does not parse as an integer.
-    pub default: i32,
+    /// The text used when the column is absent from the row or names no value.
+    pub default: &'static str,
     #[serde(skip)]
-    store: fn(&mut T, i32),
+    store: fn(&mut T, Option<&str>),
 }
 
 impl<T> Clone for Column<T> {
@@ -88,27 +197,23 @@ impl<T> Column<T> {
         field: &'static str,
         index: usize,
         scale: Scale,
-        default: i32,
-        store: fn(&mut T, i32),
+        default: &'static str,
+        store: fn(&mut T, Option<&str>),
     ) -> Self {
         Self { field, index, scale, default, store }
     }
 
     /// Reads this column out of a raw row and stores it into the target.
     ///
-    /// A column the row does not reach, or whose text does not parse as an
-    /// integer, contributes [`Column::default`] instead.
+    /// A column the row does not reach, or whose text names no value,
+    /// contributes [`Column::default`] instead. A field neither names a value
+    /// for keeps whatever it already held.
     ///
     /// # Arguments
     /// * `row` - The already-split columns of one raw row.
     /// * `target` - The structure the column's value is stored into.
     pub fn read(&self, row: &[&str], target: &mut T) {
-        let raw = row
-            .get(self.index)
-            .and_then(|value| value.trim().parse::<i32>().ok())
-            .unwrap_or(self.default);
-
-        (self.store)(target, self.scale.apply(raw));
+        (self.store)(target, row.get(self.index).copied());
     }
 }
 
@@ -136,21 +241,29 @@ pub fn apply<T>(row: &[&str], table: &[Column<T>], target: &mut T) -> usize {
 /// Declares a column table as a slice of [`Column`].
 ///
 /// Each entry is `field: index`, optionally followed by a [`Scale`] variant and
-/// then the value the column falls back to when it is missing or unparseable. A
-/// table whose columns share one fallback states it once as a leading
+/// then the value the column falls back to when it is missing or names no
+/// value. A table whose columns share one fallback states it once as a leading
 /// `absent <literal>;`, which any entry may still override.
 macro_rules! columns {
     (@scale) => { $crate::common::tools::columns::Scale::Raw };
     (@scale $scale:ident) => { $crate::common::tools::columns::Scale::$scale };
-    (@default $absent:literal,) => { $absent };
-    (@default $absent:literal, $default:literal) => { $default };
+    (@default $absent:literal,) => { stringify!($absent) };
+    (@default $absent:literal, $default:literal) => { stringify!($default) };
     (@table $absent:literal; $($field:ident : $index:literal $(, $scale:ident $(, $default:literal)?)?);* $(;)?) => {
         &[$($crate::common::tools::columns::Column::new(
             stringify!($field),
             $index,
             $crate::common::tools::columns::columns!(@scale $($scale)?),
             $crate::common::tools::columns::columns!(@default $absent, $($($default)?)?),
-            |target, value| target.$field = value,
+            |target, cell| {
+                if let Some(value) = $crate::common::tools::columns::parse_cell(
+                    cell,
+                    $crate::common::tools::columns::columns!(@default $absent, $($($default)?)?),
+                    $crate::common::tools::columns::columns!(@scale $($scale)?),
+                ) {
+                    target.$field = value;
+                }
+            },
         )),*]
     };
     (absent $absent:literal; $($body:tt)*) => {
@@ -162,3 +275,54 @@ macro_rules! columns {
 }
 
 pub(crate) use columns;
+
+#[cfg(test)]
+pub(crate) fn assert_one_field_per_column<T>(table: &[Column<T>])
+where
+    T: Default + Serialize,
+{
+    let width = table.iter().map(|column| column.index).max().map_or(0, |last| last + 1);
+
+    let changed_fields = |sentinel: &str, at: usize| -> Vec<String> {
+        let mut cells = vec!["0"; width];
+        let mut baseline = T::default();
+        apply(&cells, table, &mut baseline);
+
+        cells[at] = sentinel;
+        let mut probed = T::default();
+        apply(&cells, table, &mut probed);
+
+        let before = serde_json::to_value(&baseline).unwrap();
+        let after = serde_json::to_value(&probed).unwrap();
+
+        let (Some(before), Some(after)) = (before.as_object(), after.as_object()) else {
+            panic!("a column table's target must serialize as an object");
+        };
+
+        before
+            .iter()
+            .filter(|(key, value)| after.get(*key) != Some(*value))
+            .map(|(key, _)| key.clone())
+            .collect()
+    };
+
+    for column in table {
+        let mut reached = false;
+
+        for sentinel in ["1", "4"] {
+            let changed = changed_fields(sentinel, column.index);
+
+            assert!(
+                changed.is_empty() || changed == [column.field],
+                "column {} at index {} changed {:?}",
+                column.field,
+                column.index,
+                changed,
+            );
+
+            reached |= !changed.is_empty();
+        }
+
+        assert!(reached, "column {} at index {} reached no field", column.field, column.index);
+    }
+}
