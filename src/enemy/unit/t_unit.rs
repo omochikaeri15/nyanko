@@ -57,7 +57,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     cash_drop: 6;
     hitbox_position: 7;
     hitbox_width: 8;
-    unused: 9;
+    legacy_weak_against: 9;
     trait_red: 10;
     area_attack: 11;
     time_until_attack_1: 12;

@@ -39,7 +39,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     hitbox_position: 8;
     hitbox_width: 9;
     trait_red: 10;
-    unused: 11;
+    legacy_weak_against: 11;
     area_attack: 12;
     time_until_attack_1: 13;
     minimum_z_layer: 14;

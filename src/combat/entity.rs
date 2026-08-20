@@ -71,7 +71,7 @@ pub struct Entity {
     /// The width of the damage hitbox.
     pub hitbox_width: i32,
     /// A column the game never actually uses.
-    pub unused: i32,
+    pub legacy_weak_against: i32,
     /// The deployment cost in currency during the first chapter, before chapter cost multipliers.
     pub eoc1_cost: i32,
     /// The redeployment delay in frames after the entity is summoned.
