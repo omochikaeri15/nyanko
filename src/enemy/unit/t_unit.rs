@@ -57,7 +57,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     cash_drop: 6;
     hitbox_position: 7;
     hitbox_width: 8;
-    legacy_weak_against: 9;
+    legacy_strong_against: 9;
     trait_red: 10;
     area_attack: 11;
     time_until_attack_1: 12;
@@ -101,8 +101,8 @@ pub const COLUMNS: &[Column] = columns::columns! {
     attack_count_total: 50, Raw, -1;
     time_before_death: 51, Raw, -1;
     attack_count_state: 52;
-    spawn_animation_type: 53;
-    soul_animation_type: 54;
+    spawn_animation_type: 53, Raw, -1;
+    soul_animation_type: 54, Raw, -1;
     attack_2: 55;
     attack_3: 56;
     time_until_attack_2: 57;

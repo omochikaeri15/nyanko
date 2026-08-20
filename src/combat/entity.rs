@@ -70,8 +70,10 @@ pub struct Entity {
     pub hitbox_position: i32,
     /// The width of the damage hitbox.
     pub hitbox_width: i32,
-    /// A column the game never actually uses.
+    /// Non-zero when the entity is a valid target of the legacy strong-against matchup.
     pub legacy_weak_against: i32,
+    /// Non-zero when the entity applies the legacy strong-against matchup to opponents that accept it.
+    pub legacy_strong_against: i32,
     /// The deployment cost in currency during the first chapter, before chapter cost multipliers.
     pub eoc1_cost: i32,
     /// The redeployment delay in frames after the entity is summoned.
@@ -360,6 +362,22 @@ impl Entity {
         let cooldown_frames = self.attack_cooldown.saturating_sub(1);
 
         (effective_foreswing + cooldown_frames).max(frames)
+    }
+
+    /// Reports whether the legacy strong-against matchup resolves against a target.
+    ///
+    /// The matchup predates the trait system, so neither side names a trait the
+    /// other must carry. It applies when the attacker declares
+    /// [`Entity::legacy_strong_against`], the target declares
+    /// [`Entity::legacy_weak_against`], and the two fight on opposing sides.
+    ///
+    /// # Arguments
+    /// * `target` - The entity receiving the attack.
+    ///
+    /// # Returns
+    /// A `bool` that is true when both halves of the matchup are declared across opposing factions.
+    pub fn legacy_matchup(&self, target: &Self) -> bool {
+        self.legacy_strong_against != 0 && target.legacy_weak_against != 0 && self.faction != target.faction
     }
 }
 

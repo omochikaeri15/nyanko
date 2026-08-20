@@ -84,7 +84,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     witch_killer: 53;
     trait_witch: 54;
     attack_count_total: 55, Raw, -1;
-    boss_wave_immune: 56, Raw, -1;
+    boss_wave_immune: 56;
     time_before_death: 57, Raw, -1;
     attack_count_state: 58;
     attack_2: 59;
@@ -95,7 +95,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     attack_2_abilities: 64;
     attack_3_abilities: 65;
     spawn_animation_type: 66, Raw, -1;
-    soul_animation_type: 67;
+    soul_animation_type: 67, Raw, -1;
     spawn_animation_flag: 68;
     use_gudetama_soul: 69;
     barrier_breaker_chance: 70;

@@ -41,9 +41,9 @@ impl EvolveMaterial {
     ///
     /// # Returns
     /// A `bool` that is true when the slot holds a valid item identifier and a
-    /// positive quantity, and false for the placeholder an unused slot carries.
+    /// positive quantity, and false for the zeroed pair an unused slot carries.
     pub fn is_occupied(&self) -> bool {
-        self.item_id != -1 && self.quantity > 0
+        self.item_id != 0 && self.quantity > 0
     }
 }
 
@@ -104,9 +104,9 @@ pub struct UnitBuy {
     pub unknown_21: i32,
     /// The maximum level attainable after clearing the first chapter.
     pub level_cap_ch1: i32,
-    /// The identifier of the unit's True form, or negative one when the unit has none.
+    /// The identifier of the unit's True form, or zero when the unit has none.
     pub true_form_id: i32,
-    /// The identifier of the unit's Ultra form, or negative one when the unit has none.
+    /// The identifier of the unit's Ultra form, or zero when the unit has none.
     pub ultra_form_id: i32,
     /// The level the unit must reach before the True form evolution becomes available.
     pub true_form_unlock_level: i32,
@@ -196,8 +196,8 @@ pub struct UnitBuy {
 impl Default for UnitBuy {
     /// Produces a row in which every reference to another entity is absent.
     ///
-    /// The four identifier fields hold negative one rather than zero, matching
-    /// the sentinel the raw columns use.
+    /// Each field holds the value the matching column of [`UnitBuy::COLUMNS`]
+    /// falls back to when a row does not reach it.
     fn default() -> Self {
         Self {
             stage_unlock_requirement: 0,
@@ -214,19 +214,19 @@ impl Default for UnitBuy {
             upgrade_cost_10: 0,
             currency_type: 0,
             rarity: 0,
-            guide_order: 0,
+            guide_order: -1,
             chapter_unlock_requirement: 0,
             sell_xp_yield: 0,
             unknown_17: 0,
             level_cap_ch2: 0,
             base_max_plus_level: 0,
-            evolve_level_xp: 0,
+            evolve_level_xp: -1,
             unknown_21: 0,
             level_cap_ch1: 0,
-            true_form_id: -1,
-            ultra_form_id: -1,
-            true_form_unlock_level: 0,
-            ultra_form_unlock_level: 0,
+            true_form_id: 0,
+            ultra_form_id: 0,
+            true_form_unlock_level: -1,
+            ultra_form_unlock_level: -1,
             true_form_xp_cost: 0,
             true_form_material_1_id: 0,
             true_form_material_1_quantity: 0,
@@ -249,7 +249,7 @@ impl Default for UnitBuy {
             ultra_form_material_4_quantity: 0,
             ultra_form_material_5_id: 0,
             ultra_form_material_5_quantity: 0,
-            level_cap_standard: 0,
+            level_cap_standard: -1,
             level_cap_catseye: 0,
             level_cap_plus: 0,
             normal_evolution_y_offset: 0,
@@ -257,7 +257,7 @@ impl Default for UnitBuy {
             true_evolution_y_offset: 0,
             ultra_evolution_y_offset: 0,
             unknown_56: 0,
-            version_added: 0,
+            version_added: -1,
             sell_np_yield: 0,
             unknown_59: 0,
             unknown_60: 0,
@@ -272,10 +272,11 @@ impl UnitBuy {
     /// The column mapping this parser applies, in the order it applies it.
     ///
     /// Published so a consumer can read the layout of a `unitbuy.csv` row from
-    /// the parser's own table instead of restating it. Every column falls back to
-    /// negative one, and columns past the table are kept in [`UnitBuy::rest`].
+    /// the parser's own table instead of restating it. A column falls back to
+    /// zero unless it declares the negative one the raw table uses to mean
+    /// absent, and columns past the table are kept in [`UnitBuy::rest`].
     pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
-        absent -1;
+        absent 0;
         stage_unlock_requirement       : 0;
         purchase_cost                  : 1;
         upgrade_cost_1                 : 2;
@@ -290,19 +291,19 @@ impl UnitBuy {
         upgrade_cost_10                : 11;
         currency_type                  : 12;
         rarity                         : 13;
-        guide_order                    : 14;
+        guide_order                    : 14, Raw, -1;
         chapter_unlock_requirement     : 15;
         sell_xp_yield                  : 16;
         unknown_17                     : 17;
         level_cap_ch2                  : 18;
         base_max_plus_level            : 19;
-        evolve_level_xp                : 20;
+        evolve_level_xp                : 20, Raw, -1;
         unknown_21                     : 21;
         level_cap_ch1                  : 22;
         true_form_id                   : 23;
         ultra_form_id                  : 24;
-        true_form_unlock_level         : 25;
-        ultra_form_unlock_level        : 26;
+        true_form_unlock_level         : 25, Raw, -1;
+        ultra_form_unlock_level        : 26, Raw, -1;
         true_form_xp_cost              : 27;
         true_form_material_1_id        : 28;
         true_form_material_1_quantity  : 29;
@@ -325,7 +326,7 @@ impl UnitBuy {
         ultra_form_material_4_quantity : 46;
         ultra_form_material_5_id       : 47;
         ultra_form_material_5_quantity : 48;
-        level_cap_standard             : 49;
+        level_cap_standard             : 49, Raw, -1;
         level_cap_catseye              : 50;
         level_cap_plus                 : 51;
         normal_evolution_y_offset      : 52;
@@ -333,12 +334,12 @@ impl UnitBuy {
         true_evolution_y_offset        : 54;
         ultra_evolution_y_offset       : 55;
         unknown_56                     : 56;
-        version_added                  : 57;
+        version_added                  : 57, Raw, -1;
         sell_np_yield                  : 58;
         unknown_59                     : 59;
         unknown_60                     : 60;
-        egg_id_normal                  : 61;
-        egg_id_evolved                 : 62;
+        egg_id_normal                  : 61, Raw, -1;
+        egg_id_evolved                 : 62, Raw, -1;
     };
 
     /// Decodes the unit's egg counterparts into a pair of optional identifiers.
@@ -720,11 +721,26 @@ mod tests {
     }
 
     #[test]
-    fn a_short_row_falls_back_to_the_sentinel() {
+    fn the_default_row_agrees_with_the_column_table() {
+        let row = serde_json::to_value(UnitBuy::default()).unwrap();
+        let fields = row.as_object().unwrap();
+
+        for column in UnitBuy::COLUMNS {
+            let declared = column.default.parse::<i64>().unwrap();
+            let held = fields.get(column.field).and_then(serde_json::Value::as_i64);
+
+            assert_eq!(held, Some(declared), "{}", column.field);
+        }
+    }
+
+    #[test]
+    fn a_short_row_falls_back_to_each_columns_default() {
         let row = parse_one("0,0,50");
 
         assert_eq!(row.upgrade_cost_1, 50);
-        assert_eq!(row.upgrade_cost_2, -1);
+        assert_eq!(row.upgrade_cost_2, 0);
+        assert_eq!(row.true_form_id, 0);
+        assert_eq!(row.true_form_unlock_level, -1);
         assert_eq!(row.egg_id_evolved, -1);
         assert!(row.rest.is_empty());
     }
