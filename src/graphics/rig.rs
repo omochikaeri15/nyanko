@@ -11,15 +11,13 @@ mod mamodel;
 use std::error;
 use std::fmt;
 
-use super::engine::{timeline, transform};
+use super::animate::{resolve_frame, FrameData};
 use super::tools::{boundary, periodicity};
 
-pub use boundary::BoundingBox;
-pub use imgcut::{ImgRect, ImgVec2, SpriteCut, SpriteSheet};
+pub use boundary::{BoundingBox, Tolerance};
+pub use imgcut::{SpriteCut, SpriteSheet};
 pub use maanim::{AnimModification, Animation, Keyframe};
-pub use mamodel::{Model, ModelPart};
-
-const DEFAULT_FRAME_CEILING: i32 = 10_000;
+pub use mamodel::{Alignment, Model, ModelPart};
 
 /// Represents errors that can occur while parsing a unit's rig or animations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,7 +27,7 @@ pub enum RigError {
     EmptyFile,
     /// The supplied bytes were too short to contain a complete file header.
     TruncatedHeader,
-    /// No line declaring a usable model part count was found in the file's leading rows.
+    /// No line declaring a usable model part count was found in the file's header.
     NoPartHeader,
     /// The texture atlas could not be decoded, and salvage of the stream also failed.
     ImageDecodeFailed,
@@ -55,8 +53,7 @@ impl error::Error for RigError {}
 ///
 /// The engine splits this across three files, because the model references
 /// sprite regions by index and those indices are only meaningful against the
-/// atlas that accompanies it. Pairing them in one structure keeps that
-/// correspondence intact for the geometry routines that consume both.
+/// atlas that accompanies it.
 #[derive(Debug, Clone)]
 pub struct Rig {
     /// The hierarchical part tree describing how the unit is assembled and animated.
@@ -65,7 +62,7 @@ pub struct Rig {
     pub sheet: SpriteSheet,
 }
 
-/// A detected periodic interval within an animation, measured in frames.
+/// A detected repeating interval within an animation, measured in frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cycle {
     /// The first frame of the repeating interval.
@@ -87,9 +84,6 @@ impl Cycle {
 
 impl Rig {
     /// Parses a unit's texture atlas, sprite cut list, and model hierarchy into a rig.
-    ///
-    /// The atlas and cut list resolve together, since sprite regions are pixel
-    /// rectangles normalized against the decoded image dimensions.
     ///
     /// # Arguments
     /// * `png` - The raw bytes of the unit's PNG texture atlas.
@@ -116,12 +110,12 @@ impl Rig {
 
     /// Calculates the smallest rectangle enclosing the rig across a set of animations.
     ///
-    /// Every frame of every animation is solved and its visible geometry
+    /// Every frame of every animation is resolved and its visible geometry
     /// accumulated, so the result encloses the full range of motion rather than
     /// any single pose. Parts the tolerance judges invisible are excluded.
     ///
     /// # Arguments
-    /// * `animations` - The animations to sweep. An empty slice measures the rig in its rest pose.
+    /// * `animations` - The animations to sweep. An empty slice measures the rig in its resting pose.
     /// * `tolerance` - A value from zero to one controlling how aggressively marginal parts are discarded, where zero excludes nothing.
     ///
     /// # Returns
@@ -132,13 +126,12 @@ impl Rig {
         animations: &[&Animation],
         tolerance: f32,
     ) -> Option<BoundingBox> {
-        let tolerance = boundary::Tolerance::new(tolerance);
-        boundary::calculate_animation_bounds(&self.model, &self.sheet, animations, tolerance)
+        boundary::calculate_animation_bounds(self, animations, Tolerance::new(tolerance))
     }
 
     /// Searches an animation for the shortest interval after which its pose repeats.
     ///
-    /// Frames are solved in sequence and compared against every earlier frame
+    /// Frames are resolved in sequence and compared against every earlier frame
     /// until two match within the tolerance, detecting the true visual loop of
     /// animations whose declared keyframe range disagrees with their actual
     /// period.
@@ -147,7 +140,7 @@ impl Rig {
     /// * `animation` - The animation timeline to search.
     /// * `tolerance` - The maximum accumulated difference at which two frames are considered identical.
     /// * `minimum_frame` - The shortest interval to accept, which suppresses degenerate one-frame matches. Defaults to one.
-    /// * `maximum_frame` - The highest frame to search before abandoning the search. Defaults to an internal ceiling.
+    /// * `maximum_frame` - The highest frame to search before abandoning the search. Defaults to the highest frame a frame counter holds, leaving the callback to bound the search.
     /// * `progress_callback` - Invoked with each frame index as it is evaluated; returning `false` abandons the search.
     ///
     /// # Returns
@@ -162,50 +155,29 @@ impl Rig {
         maximum_frame: Option<i32>,
         mut progress_callback: impl FnMut(usize) -> bool,
     ) -> Option<Cycle> {
-        let mut frame_states: Vec<Vec<([f32; 9], f32)>> = Vec::new();
-        let mut state_buffer = self.model.parts.clone();
-        let mut current_frame = 0;
-
         let minimum_loop_length = minimum_frame.unwrap_or(1);
-        let frame_ceiling = maximum_frame.unwrap_or(DEFAULT_FRAME_CEILING);
+        let frame_ceiling = maximum_frame.unwrap_or(i32::MAX);
 
-        loop {
-            if !progress_callback(current_frame) {
-                return None;
-            }
+        let mut history: Vec<Vec<FrameData>> = Vec::new();
+        let mut frame = 0;
 
-            if current_frame as i64 > frame_ceiling as i64 {
-                return None;
-            }
+        while frame <= frame_ceiling {
+            if !progress_callback(frame as usize) { return None; }
 
-            let frame_float = current_frame as f32;
-            let _ = timeline::animate(&self.model, animation, frame_float, &mut state_buffer);
-            let world_parts = transform::solve_hierarchy(&state_buffer, &self.model);
+            let current = resolve_frame(self, Some(animation), frame);
 
-            let mut current_state = Vec::with_capacity(world_parts.len());
-            for part in &world_parts {
-                current_state.push((part.matrix, part.opacity));
-            }
+            for (past_frame, past) in history.iter().enumerate() {
+                if frame - (past_frame as i32) < minimum_loop_length { continue; }
 
-            for (past_frame_index, past_state) in frame_states.iter().enumerate() {
-                let loop_length = current_frame as i32 - past_frame_index as i32;
-
-                if loop_length < minimum_loop_length {
-                    continue;
-                }
-
-                let difference = periodicity::calculate_difference(&current_state, past_state);
-
-                if difference <= tolerance {
-                    return Some(Cycle {
-                        start: past_frame_index as i32,
-                        end: current_frame as i32,
-                    });
+                if periodicity::calculate_difference(&current, past) <= tolerance {
+                    return Some(Cycle { start: past_frame as i32, end: frame });
                 }
             }
 
-            frame_states.push(current_state);
-            current_frame += 1;
+            history.push(current);
+            frame = frame.checked_add(1)?;
         }
+
+        None
     }
 }

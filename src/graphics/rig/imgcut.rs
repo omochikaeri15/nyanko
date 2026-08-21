@@ -1,8 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use image::{self, RgbaImage};
+use serde::Serialize;
 
+use crate::common::tools::columns::{self, Column};
 use crate::common::tools::file;
 
 use super::RigError;
@@ -11,33 +12,33 @@ const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
 const MINIMUM_PNG_LENGTH: usize = 33;
 
-/// A two-dimensional coordinate or dimension.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ImgVec2 {
-    /// The horizontal component.
-    pub x: f32,
-    /// The vertical component.
-    pub y: f32
-}
-
-/// A spatial bounding box defined by two points.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ImgRect {
-    /// The upper-left corner of the region.
-    pub min: ImgVec2,
-    /// The lower-right corner of the region.
-    pub max: ImgVec2
-}
-
-/// One sprite region within a texture atlas.
-#[derive(Clone, Debug, PartialEq)]
+/// One sprite region within a texture atlas, in source pixels.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct SpriteCut {
-    /// The region's bounds expressed as normalized texture coordinates from zero to one.
-    pub uv_coordinates: ImgRect,
-    /// The region's dimensions in source pixels, before normalization.
-    pub original_size: ImgVec2,
+    /// The left edge of the region.
+    pub x: i32,
+    /// The top edge of the region.
+    pub y: i32,
+    /// The width of the region.
+    pub width: i32,
+    /// The height of the region.
+    pub height: i32,
     /// The region's declared name, which is empty when the cut list supplies none.
     pub name: String,
+}
+
+impl SpriteCut {
+    /// The column mapping this parser applies, in the order it applies it.
+    ///
+    /// Published so a consumer can read the layout of an `.imgcut` region row
+    /// from the parser's own table instead of restating it. [`SpriteCut::name`]
+    /// is the row's trailing text rather than a column.
+    pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
+        x      : 0;
+        y      : 1;
+        width  : 2;
+        height : 3;
+    };
 }
 
 /// A decoded texture atlas and the sprite regions carved out of it.
@@ -45,17 +46,20 @@ pub struct SpriteCut {
 pub struct SpriteSheet {
     /// The decoded atlas with its color channels premultiplied by alpha, shared cheaply between clones.
     pub image_data: Option<Arc<RgbaImage>>,
-    /// The sprite regions carved out of the atlas, keyed by the index the model addresses them through.
-    pub cuts_map: HashMap<usize, SpriteCut>,
+    /// The declared format version of the cut list.
+    pub version: i32,
+    /// The file name of the atlas the cut list names.
+    pub image_name: String,
+    /// The sprite regions carved out of the atlas, in the order the file declares them.
+    pub cuts: Vec<SpriteCut>,
 }
 
 impl SpriteSheet {
     /// Parses a texture atlas and its sprite cut list into a resolved sprite sheet.
     ///
     /// Color channels are premultiplied by alpha and fully transparent pixels
-    /// zeroed, and sprite regions are normalized against the decoded image
-    /// dimensions. A texture that fails to decode is passed through salvage
-    /// before being abandoned.
+    /// zeroed. A texture that fails to decode is passed through salvage before
+    /// being abandoned.
     ///
     /// # Arguments
     /// * `png` - The raw bytes of the PNG texture atlas.
@@ -78,9 +82,6 @@ impl SpriteSheet {
 
         let mut image = image_opt.ok_or(RigError::ImageDecodeFailed)?;
 
-        let image_width = image.width() as f32;
-        let image_height = image.height() as f32;
-
         for pixel in image.pixels_mut() {
             let alpha = pixel[3] as u32;
 
@@ -102,62 +103,37 @@ impl SpriteSheet {
         let delimiter = file::detect_separator(&content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
 
-        let mut sprite_count = 0;
-        let mut data_start_index = 0;
-        let mut found_header = false;
+        let mut cursor = usize::from(lines.first().is_some_and(|line| line.trim_start().starts_with('[')));
 
-        for (index, line) in lines.iter().enumerate() {
-            if line.contains(delimiter) {
-                if found_header { break; }
-                continue;
-            }
+        let version = lines.get(cursor).and_then(|line| line.trim().parse().ok()).unwrap_or(0);
+        cursor += 1;
 
-            let Ok(count_val) = line.trim().parse::<usize>() else { continue; };
+        let image_name = lines.get(cursor).map(|line| line.trim().to_string()).unwrap_or_default();
+        cursor += 1;
 
-            if count_val > 0 && count_val < 10000 {
-                sprite_count = count_val;
-                data_start_index = index + 1;
-                found_header = true;
-            }
+        let count = lines.get(cursor)
+            .and_then(|line| line.trim().parse::<usize>().ok())
+            .ok_or(RigError::NoSpriteCuts)?;
+        cursor += 1;
+
+        let declared = count.min(lines.len().saturating_sub(cursor));
+        let mut cuts = Vec::with_capacity(declared);
+
+        for index in 0..declared {
+            let row: Vec<&str> = lines[cursor + index].split(delimiter).collect();
+            let mut cut = SpriteCut::default();
+
+            let trailing = columns::apply(&row, SpriteCut::COLUMNS, &mut cut);
+            cut.name = row.get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
+
+            cuts.push(cut);
         }
 
-        if !found_header || sprite_count == 0 {
-            data_start_index = 0;
-            sprite_count = lines.len();
-        }
-
-        let mut parsed_cuts = HashMap::new();
-
-        for current_cut_index in 0..sprite_count {
-            let line_index = data_start_index + current_cut_index;
-            if line_index >= lines.len() { break; }
-
-            let line = lines[line_index];
-            let parts: Vec<&str> = line.split(delimiter).collect();
-
-            if parts.len() < 4 { continue; }
-
-            let Ok(cut_x) = parts[0].trim().parse::<f32>() else { continue; };
-            let Ok(cut_y) = parts[1].trim().parse::<f32>() else { continue; };
-            let Ok(cut_width) = parts[2].trim().parse::<f32>() else { continue; };
-            let Ok(cut_height) = parts[3].trim().parse::<f32>() else { continue; };
-
-            let uv_min = ImgVec2 { x: cut_x / image_width, y: cut_y / image_height };
-            let uv_max = ImgVec2 { x: (cut_x + cut_width) / image_width, y: (cut_y + cut_height) / image_height };
-            let cut_name = if parts.len() > 4 { parts[4].trim().to_string() } else { String::new() };
-
-            parsed_cuts.insert(current_cut_index, SpriteCut {
-                uv_coordinates: ImgRect { min: uv_min, max: uv_max },
-                original_size: ImgVec2 { x: cut_width, y: cut_height },
-                name: cut_name,
-            });
-        }
-
-        if parsed_cuts.is_empty() {
+        if cuts.is_empty() {
             return Err(RigError::NoSpriteCuts);
         }
 
-        Ok(Self { image_data: Some(Arc::new(image)), cuts_map: parsed_cuts })
+        Ok(Self { image_data: Some(Arc::new(image)), version, image_name, cuts })
     }
 
     /// Salvages a corrupted or truncated PNG stream into the largest decodable image.
@@ -297,5 +273,15 @@ impl SpriteSheet {
         }
 
         Ok(full_canvas)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cut_columns_map_one_field_each() {
+        columns::assert_one_field_per_column(SpriteCut::COLUMNS);
     }
 }

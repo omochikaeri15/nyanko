@@ -92,9 +92,6 @@ pub enum Error {
     /// A unit's rig or animation data could not be parsed.
     #[cfg(feature = "graphics")]
     Rig(crate::graphics::rig::RigError),
-    /// An animation could not be applied to a model.
-    #[cfg(feature = "graphics")]
-    Timeline(crate::graphics::engine::timeline::TimelineError),
     /// An asset pack chunk or manifest could not be processed.
     #[cfg(feature = "pack")]
     Pack(crate::pack::cryptology::PackError),
@@ -139,8 +136,6 @@ impl Error {
             Self::Param(source) => source,
             #[cfg(feature = "graphics")]
             Self::Rig(source) => source,
-            #[cfg(feature = "graphics")]
-            Self::Timeline(source) => source,
             #[cfg(feature = "pack")]
             Self::Pack(source) => source,
             #[cfg(feature = "bcu")]
@@ -351,13 +346,6 @@ impl From<ParamError> for Error {
 impl From<crate::graphics::rig::RigError> for Error {
     fn from(source: crate::graphics::rig::RigError) -> Self {
         Self::Rig(source)
-    }
-}
-
-#[cfg(feature = "graphics")]
-impl From<crate::graphics::engine::timeline::TimelineError> for Error {
-    fn from(source: crate::graphics::engine::timeline::TimelineError) -> Self {
-        Self::Timeline(source)
     }
 }
 

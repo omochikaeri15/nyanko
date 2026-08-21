@@ -49,7 +49,7 @@ pub struct Unit {
     pub combat: Option<Entity>,
     /// The absolute duration of the primary attack animation, parsed chronologically from the `maanim` sequence data.
     ///
-    /// Produced by `graphics::rig::Animation::scan_duration`, which requires the
+    /// Produced by `graphics::rig::Animation::scan_length`, which requires the
     /// non-default `graphics` feature; leave `None` without it.
     pub attack_frames: Option<i32>,
 }
