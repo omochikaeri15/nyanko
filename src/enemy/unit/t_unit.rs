@@ -51,7 +51,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     hitpoints: 0;
     knockbacks: 1;
     speed: 2;
-    attack_1: 3;
+    attack_1_damage: 3;
     attack_cooldown: 4, Double;
     standing_range: 5;
     cash_drop: 6;
@@ -103,8 +103,8 @@ pub const COLUMNS: &[Column] = columns::columns! {
     attack_count_state: 52;
     spawn_animation_type: 53, Raw, -1;
     soul_animation_type: 54, Raw, -1;
-    attack_2: 55;
-    attack_3: 56;
+    attack_2_damage: 55;
+    attack_3_damage: 56;
     time_until_attack_2: 57;
     time_until_attack_3: 58;
     attack_1_abilities: 59;
@@ -115,8 +115,8 @@ pub const COLUMNS: &[Column] = columns::columns! {
     barrier_hitpoints: 64;
     warp_chance: 65;
     warp_duration: 66;
-    warp_distance_minimum: 67, Quarter;
-    warp_distance_maximum: 68, Quarter;
+    warp_distance_anchor: 67, Quarter;
+    warp_distance_span: 68, Quarter;
     trait_starred_alien: 69;
     warp_immune: 70;
     trait_eva: 71;

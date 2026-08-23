@@ -383,7 +383,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
-        attributes: |stats| flag(stats.attack_2),
+        attributes: |stats| flag(stats.attack_2_damage),
         apply_talent: None,
     },
     Ability {
@@ -1243,8 +1243,8 @@ pub static REGISTRY: &[Ability] = &[
                 vec![
                     ("Chance", AttrValue::Finite(stats.warp_chance), AttrUnit::Percent),
                     ("Duration", AttrValue::Finite(stats.warp_duration), AttrUnit::Frames),
-                    ("Min Distance", AttrValue::Finite(stats.warp_distance_minimum), AttrUnit::Range),
-                    ("Max Distance", AttrValue::Finite(stats.warp_distance_maximum), AttrUnit::Range),
+                    ("Min Distance", AttrValue::Finite(stats.warp_distance_anchor), AttrUnit::Range),
+                    ("Max Distance", AttrValue::Finite(stats.warp_distance_span), AttrUnit::Range),
                 ]
             } else { Vec::new() }
         },
@@ -1626,9 +1626,9 @@ pub static REGISTRY: &[Ability] = &[
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, percent, _, _| {
             let percentage_factor = (100 + percent) as f32 / 100.0;
-            stats.attack_1 = (stats.attack_1 as f32 * percentage_factor).round() as i32;
-            stats.attack_2 = (stats.attack_2 as f32 * percentage_factor).round() as i32;
-            stats.attack_3 = (stats.attack_3 as f32 * percentage_factor).round() as i32;
+            stats.attack_1_damage = (stats.attack_1_damage as f32 * percentage_factor).round() as i32;
+            stats.attack_2_damage = (stats.attack_2_damage as f32 * percentage_factor).round() as i32;
+            stats.attack_3_damage = (stats.attack_3_damage as f32 * percentage_factor).round() as i32;
         }),
     },
     Ability {

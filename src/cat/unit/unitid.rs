@@ -31,7 +31,7 @@ pub const COLUMNS: &[Column] = columns::columns! {
     hitpoints: 0;
     knockbacks: 1;
     speed: 2;
-    attack_1: 3;
+    attack_1_damage: 3;
     attack_cooldown: 4, Double;
     standing_range: 5;
     eoc1_cost: 6;
@@ -87,8 +87,8 @@ pub const COLUMNS: &[Column] = columns::columns! {
     boss_wave_immune: 56;
     time_before_death: 57, Raw, -1;
     attack_count_state: 58;
-    attack_2: 59;
-    attack_3: 60;
+    attack_2_damage: 59;
+    attack_3_damage: 60;
     time_until_attack_2: 61;
     time_until_attack_3: 62;
     attack_1_abilities: 63;
@@ -101,8 +101,8 @@ pub const COLUMNS: &[Column] = columns::columns! {
     barrier_breaker_chance: 70;
     warp_chance: 71;
     warp_duration: 72;
-    warp_distance_minimum: 73, Quarter;
-    warp_distance_maximum: 74, Quarter;
+    warp_distance_anchor: 73, Quarter;
+    warp_distance_span: 74, Quarter;
     warp_immune: 75;
     trait_eva: 76;
     eva_killer: 77;

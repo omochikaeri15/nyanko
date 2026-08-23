@@ -57,11 +57,11 @@ pub struct Entity {
     /// The horizontal movement rate in engine distance units per frame.
     pub speed: i32,
     /// The damage dealt by the first attack in the entity's attack sequence.
-    pub attack_1: i32,
+    pub attack_1_damage: i32,
     /// The damage dealt by the second attack, or zero when the entity has a single-hit attack.
-    pub attack_2: i32,
+    pub attack_2_damage: i32,
     /// The damage dealt by the third attack, or zero when the entity has fewer than three hits.
-    pub attack_3: i32,
+    pub attack_3_damage: i32,
     /// The recovery period in frames between the end of one attack sequence and the start of the next.
     pub attack_cooldown: i32,
     /// The distance at which the entity halts and begins attacking.
@@ -215,9 +215,9 @@ pub struct Entity {
     /// The duration in frames the target remains immobilized after being warped.
     pub warp_duration: i32,
     /// The shortest distance a warped target is displaced.
-    pub warp_distance_minimum: i32,
+    pub warp_distance_anchor: i32,
     /// The longest distance a warped target is displaced.
-    pub warp_distance_maximum: i32,
+    pub warp_distance_span: i32,
     /// The percentage chance of evading an incoming attack.
     pub dodge_chance: i32,
     /// The duration in frames of the evasion effect.
@@ -352,10 +352,10 @@ impl Entity {
     pub fn attack_cycle(&self, frames: i32) -> i32 {
         let mut effective_foreswing = self.time_until_attack_1;
 
-        if self.attack_3 > 0 && self.time_until_attack_3 > 0 {
+        if self.attack_3_damage > 0 && self.time_until_attack_3 > 0 {
             effective_foreswing = self.time_until_attack_3;
         }
-        else if self.attack_2 > 0 && self.time_until_attack_2 > 0 {
+        else if self.attack_2_damage > 0 && self.time_until_attack_2 > 0 {
             effective_foreswing = self.time_until_attack_2;
         }
 
