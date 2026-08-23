@@ -1,11 +1,9 @@
-//! The game's own animation logic, translated as it is rather than as it might
-//! be arranged.
+//! Logic replicating the games animation engine.
 //!
 //! One pass over a rig does four things, in order: clear each part's animated
 //! state, evaluate the animation into it, place every part in the world parent
 //! before child, and sort the parts by depth. Everything but the rotation is
-//! integer arithmetic, and every division truncates toward zero exactly where
-//! the engine's does.
+//! integer arithmetic, and every division truncates toward zero.
 //!
 //! Nothing here is public. [`super::animate`] turns what this produces into the
 //! geometry a caller actually consumes.

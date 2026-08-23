@@ -7,7 +7,7 @@
 use super::engine::{self, Part, Point};
 use super::rig::{Animation, Rig};
 
-/// The highest blending mode the engine's table defines.
+/// The highest blending mode defined.
 const GLOW_MODES: i32 = 3;
 
 /// One part of a rig, resolved into renderer-ready geometry for a single frame.
