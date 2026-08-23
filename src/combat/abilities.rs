@@ -269,6 +269,8 @@ pub enum Identity {
     TbaDown,
     /// Increases the number of times it may be repelled before being defeated.
     ImproveKnockbacks,
+    /// Lingers on the field for a delay after being defeated before its corpse is removed.
+    TimeBeforeDeath,
 }
 
 /// The complete definition of one combat ability.
@@ -1666,5 +1668,19 @@ pub static REGISTRY: &[Ability] = &[
         schema: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, count, _, _| stats.knockbacks += count),
+    },
+    Ability {
+        identity: Identity::TimeBeforeDeath,
+        talent_id: None,
+        icon_id: None,
+        name: "",
+        description: "",
+        schema: &[("Duration", AttrUnit::Frames)],
+        attributes: |stats| {
+            if stats.time_before_death > -1 {
+                vec![("Duration", AttrValue::Finite(stats.time_before_death), AttrUnit::Frames)]
+            } else { Vec::new() }
+        },
+        apply_talent: None,
     },
 ];

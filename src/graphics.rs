@@ -2,7 +2,7 @@
 //!
 //! This module turns the engine's raw animation assets into geometry any canvas
 //! implementation can draw, without itself depending on a rendering backend.
-//! Parsing lives in [`rig`], the game's own animation logic in [`engine`], the
+//! Parsing lives in [`rig`], the game's own animation logic in `engine`, the
 //! geometry a caller consumes in [`animate`], and the measurement and comparison
 //! helpers in [`tools`].
 //!

@@ -1,7 +1,7 @@
 //! The geometry a caller consumes, and the one call that produces it.
 //!
 //! This is the whole front of the graphics module. It holds no animation logic
-//! of its own: [`super::engine`] poses and places the parts, and this turns the
+//! of its own: `engine` poses and places the parts, and this turns the
 //! result into flat vertex arrays.
 
 use super::engine::{self, Part, Point};
