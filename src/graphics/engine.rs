@@ -390,19 +390,20 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
         high += 1;
     }
 
+    let run = &keyframes[low..=high];
     let mut total: i64 = 0;
 
-    for outer in low..=high {
-        let mut term = (keyframes[outer].value as i64) << POLYNOMIAL_SHIFT;
+    for (outer_offset, outer) in run.iter().enumerate() {
+        let mut term = (outer.value as i64) << POLYNOMIAL_SHIFT;
 
-        for inner in low..=high {
-            if outer == inner { continue; }
+        for (inner_offset, inner) in run.iter().enumerate() {
+            if outer_offset == inner_offset { continue; }
 
-            let divisor = keyframes[outer].frame.wrapping_sub(keyframes[inner].frame) as i64;
+            let divisor = outer.frame.wrapping_sub(inner.frame) as i64;
             if divisor == 0 { continue; }
 
             term = term
-                .wrapping_mul(local.wrapping_sub(keyframes[inner].frame) as i64)
+                .wrapping_mul(local.wrapping_sub(inner.frame) as i64)
                 .wrapping_div(divisor);
         }
 
@@ -418,21 +419,42 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
 /// whose resolved parent was collected in the previous sweep and starting from
 /// the parts that name no parent at all. A part caught in a parent cycle is
 /// never collected, and so is never placed in the world.
+///
+/// Membership in the previous sweep is tracked as one flag per part index
+/// rather than scanning a list of that generation's parents, which is the same
+/// generations in the same order but without a comparison cost that grows with
+/// how many parts the previous generation collected.
 fn deployment_order(parts: &[Part]) -> Vec<usize> {
     let mut order = Vec::with_capacity(parts.len());
-    let mut frontier = vec![NO_PARENT];
+    let mut in_frontier = vec![false; parts.len()];
+    let mut collected = Vec::new();
+    let mut root_active = true;
 
-    while !frontier.is_empty() {
-        let mut collected = Vec::new();
+    loop {
+        collected.clear();
 
         for (index, part) in parts.iter().enumerate() {
-            if !frontier.contains(&part.parent()) { continue; }
+            let parent = part.parent();
+            let is_member = if parent == NO_PARENT {
+                root_active
+            } else {
+                usize::try_from(parent).is_ok_and(|at| in_frontier.get(at).copied().unwrap_or(false))
+            };
+
+            if !is_member { continue; }
 
             order.push(index);
-            collected.push(index as i32);
+            collected.push(index);
         }
 
-        frontier = collected;
+        if collected.is_empty() { break; }
+
+        root_active = false;
+        in_frontier.fill(false);
+
+        for &index in &collected {
+            in_frontier[index] = true;
+        }
     }
 
     order
@@ -530,6 +552,130 @@ fn deploy(parts: &mut [Part], index: usize, model: &Model, sheet: &SpriteSheet) 
 
     for corner in &mut part.world.corners {
         *corner = part.world.transform.apply(*corner);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keyframe(frame: i32, value: i32, ease: i32) -> Keyframe {
+        Keyframe { frame, value, ease, ease_power: 0 }
+    }
+
+    fn modification(keyframes: Vec<Keyframe>) -> AnimModification {
+        AnimModification { loop_count: 1, keyframes, ..AnimModification::default() }
+    }
+
+    #[test]
+    fn evaluate_returns_none_before_the_first_keyframe() {
+        let modification = modification(vec![
+            keyframe(10, 5, EASE_LINEAR),
+            keyframe(20, 15, EASE_LINEAR),
+        ]);
+
+        assert_eq!(evaluate(&modification, 5), None);
+    }
+
+    #[test]
+    fn evaluate_returns_the_last_value_at_the_last_frame() {
+        let modification = modification(vec![
+            keyframe(0, 5, EASE_LINEAR),
+            keyframe(20, 15, EASE_LINEAR),
+        ]);
+
+        assert_eq!(evaluate(&modification, 20), Some(15));
+    }
+
+    #[test]
+    fn evaluate_finds_the_first_matching_bracket_even_when_a_later_keyframe_repeats_the_frame() {
+        // A real `.maanim` file (unit 360's true form, second animation, part
+        // 27's angle curve) declares frames out of order: ..., 21, 17, 26, ...
+        // The engine's own forward scan brackets on the first pair it finds,
+        // so a later keyframe naming a frame the scan already passed is
+        // reachable only through whichever pair the scan hits first.
+        let modification = modification(vec![
+            keyframe(0, 0, EASE_LINEAR),
+            keyframe(14, 14, EASE_LINEAR),
+            keyframe(15, 15, EASE_LINEAR),
+            keyframe(21, 21, EASE_LINEAR),
+            keyframe(17, 17, EASE_LINEAR),
+            keyframe(26, 26, EASE_LINEAR),
+        ]);
+
+        assert_eq!(evaluate(&modification, 17), Some(17));
+        assert_eq!(evaluate(&modification, 20), Some(20));
+    }
+
+    /// The pre-slice, indexed Lagrange sum, kept here only as an oracle the
+    /// bounds-check-eliding `polynomial` is checked against.
+    fn indexed_polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
+        let mut low = index;
+        while low > 0 && keyframes[low - 1].ease == EASE_POLYNOMIAL {
+            low -= 1;
+        }
+
+        let mut high = index + 1;
+        while high + 1 < keyframes.len() && keyframes[high].ease == EASE_POLYNOMIAL {
+            high += 1;
+        }
+
+        let mut total: i64 = 0;
+
+        for outer in low..=high {
+            let mut term = (keyframes[outer].value as i64) << POLYNOMIAL_SHIFT;
+
+            for inner in low..=high {
+                if outer == inner { continue; }
+
+                let divisor = keyframes[outer].frame.wrapping_sub(keyframes[inner].frame) as i64;
+                if divisor == 0 { continue; }
+
+                term = term
+                    .wrapping_mul(local.wrapping_sub(keyframes[inner].frame) as i64)
+                    .wrapping_div(divisor);
+            }
+
+            total = total.wrapping_add(term);
+        }
+
+        (total / (1 << POLYNOMIAL_SHIFT)) as i32
+    }
+
+    #[test]
+    fn polynomial_matches_the_old_indexed_computation() {
+        let keyframes = vec![
+            keyframe(0, 3, EASE_POLYNOMIAL),
+            keyframe(5, 40, EASE_POLYNOMIAL),
+            keyframe(9, 17, EASE_POLYNOMIAL),
+            keyframe(14, -22, EASE_POLYNOMIAL),
+            keyframe(20, 100, EASE_LINEAR),
+        ];
+
+        for local in 1..14 {
+            assert_eq!(
+                polynomial(&keyframes, 1, local),
+                indexed_polynomial(&keyframes, 1, local),
+                "local {local}",
+            );
+        }
+    }
+
+    #[test]
+    fn polynomial_matches_across_the_whole_run_when_the_run_spans_the_slice() {
+        let keyframes = vec![
+            keyframe(0, -5, EASE_POLYNOMIAL),
+            keyframe(3, 12, EASE_POLYNOMIAL),
+            keyframe(8, 9, EASE_POLYNOMIAL),
+        ];
+
+        for local in 1..8 {
+            assert_eq!(
+                polynomial(&keyframes, 0, local),
+                indexed_polynomial(&keyframes, 0, local),
+                "local {local}",
+            );
+        }
     }
 }
 
