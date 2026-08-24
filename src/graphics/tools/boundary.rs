@@ -117,7 +117,7 @@ impl Tolerance {
 /// * `rig` - The rig to measure.
 /// * `animations` - The animations to sweep.
 /// * `tolerance` - The thresholds deciding which parts count towards the result.
-/// * `frame_limit` - The last frame to measure in each animation, or `None` to sweep every animation in full.
+/// * `to_frame` - The last frame to measure in each animation, or `None` to sweep every animation in full.
 ///
 /// # Returns
 /// An `Option` containing the combined `BoundingBox`, or `None` if no animation
@@ -126,11 +126,11 @@ pub fn calculate_animation_bounds(
     rig: &Rig,
     animations: &[&Animation],
     tolerance: Tolerance,
-    frame_limit: Option<i32>,
+    to_frame: Option<i32>,
 ) -> Option<BoundingBox> {
     animations.iter().fold(None, |combined, animation| {
-        let range = frame_limit
-            .map(|limit| (0, animation.playback_frames().saturating_sub(1).min(limit)));
+        let range = to_frame
+            .map(|to| (0, animation.playback_frames().saturating_sub(1).min(to)));
 
         let measured = scan_bounds(rig, Some(animation), tolerance, range);
 

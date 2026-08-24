@@ -117,7 +117,7 @@ impl Rig {
     /// # Arguments
     /// * `animations` - The animations to sweep. An empty slice measures the rig in its resting pose.
     /// * `tolerance` - A value from zero to one controlling how aggressively marginal parts are discarded, where zero excludes nothing.
-    /// * `frame_limit` - The last frame to measure in each animation, or `None` to sweep every animation in full.
+    /// * `to_frame` - The last frame to measure in each animation, or `None` to sweep every animation in full.
     ///
     /// # Returns
     /// An `Option` containing the enclosing `BoundingBox`, or `None` if no part
@@ -126,9 +126,9 @@ impl Rig {
         &self,
         animations: &[&Animation],
         tolerance: f32,
-        frame_limit: Option<i32>,
+        to_frame: Option<i32>,
     ) -> Option<BoundingBox> {
-        boundary::calculate_animation_bounds(self, animations, Tolerance::new(tolerance), frame_limit)
+        boundary::calculate_animation_bounds(self, animations, Tolerance::new(tolerance), to_frame)
     }
 
     /// Searches an animation for the shortest interval after which its pose repeats.
