@@ -210,22 +210,19 @@ impl Animation {
         (period > 1).then_some(period)
     }
 
-    /// Returns the number of frames to play before returning to the start.
+    /// Returns the number of frames the file itself defines.
     ///
-    /// The engine never loops an animation itself: a modification that replays
-    /// wraps its own keyframe range, and [`Animation::length`] reports minus one
-    /// for a timeline that never ends. Anything that plays a timeline back still
-    /// needs somewhere to restart, so this prefers the interval over which every
-    /// modification realigns, falls back to the engine's own length, and
-    /// otherwise takes the furthest keyframe any modification reaches.
+    /// A timeline that ends occupies the length the engine measures across every
+    /// replay. A timeline that never ends is measured by the furthest keyframe
+    /// any modification reaches, which is the point a forever replaying
+    /// modification wraps back to its first keyframe and so renders the same as
+    /// frame zero, leaving the count one short of that frame.
     ///
     /// # Returns
-    /// An `i32` containing the frame count, which is at least one.
-    pub fn playback_frames(&self) -> i32 {
-        if let Some(period) = self.period() {
-            return period.max(1);
-        }
-
+    /// An `i32` containing the engine's length for a timeline that ends, and
+    /// otherwise the furthest frame any modification reaches, which is at least
+    /// one.
+    pub fn declared_frames(&self) -> i32 {
         match self.length() {
             length if length > 0 => length,
             _ => self.modifications.iter()
@@ -233,6 +230,24 @@ impl Animation {
                 .fold(0, |furthest, keyframe| furthest.max(keyframe.frame))
                 .max(1),
         }
+    }
+
+    /// Returns the number of frames to play before returning to the start.
+    ///
+    /// The engine never loops an animation itself: a modification that replays
+    /// wraps its own keyframe range, and [`Animation::length`] reports minus one
+    /// for a timeline that never ends. Anything that plays a timeline back still
+    /// needs somewhere to restart, so this prefers the interval over which every
+    /// modification realigns and falls back to
+    /// [`Animation::declared_frames`]. That interval is the least common
+    /// multiple of the replaying spans and grows far past the authored content,
+    /// so anything sizing a control, a default range or a bounded sweep wants
+    /// [`Animation::declared_frames`] instead.
+    ///
+    /// # Returns
+    /// An `i32` containing the frame count, which is at least one.
+    pub fn playback_frames(&self) -> i32 {
+        self.period().map_or_else(|| self.declared_frames(), |period| period.max(1))
     }
 
     /// Measures an animation's length without building the full timeline.
@@ -360,6 +375,27 @@ mod tests {
         };
 
         assert_eq!(animation.period(), Some(24));
+    }
+
+    #[test]
+    fn declared_frames_ignores_the_realignment_interval() {
+        let animation = Animation {
+            version: 1,
+            modifications: vec![modification(-1, &[0, 8]), modification(-1, &[0, 140])],
+        };
+
+        assert_eq!(animation.playback_frames(), 280);
+        assert_eq!(animation.declared_frames(), 140);
+    }
+
+    #[test]
+    fn declared_frames_counts_a_timeline_that_ends() {
+        let animation = Animation {
+            version: 1,
+            modifications: vec![modification(1, &[0, 152])],
+        };
+
+        assert_eq!(animation.declared_frames(), 153);
     }
 
     #[test]
