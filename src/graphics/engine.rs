@@ -419,11 +419,6 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
 /// whose resolved parent was collected in the previous sweep and starting from
 /// the parts that name no parent at all. A part caught in a parent cycle is
 /// never collected, and so is never placed in the world.
-///
-/// Membership in the previous sweep is tracked as one flag per part index
-/// rather than scanning a list of that generation's parents, which is the same
-/// generations in the same order but without a comparison cost that grows with
-/// how many parts the previous generation collected.
 fn deployment_order(parts: &[Part]) -> Vec<usize> {
     let mut order = Vec::with_capacity(parts.len());
     let mut in_frontier = vec![false; parts.len()];
