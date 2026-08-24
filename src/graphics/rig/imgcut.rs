@@ -100,7 +100,7 @@ impl SpriteSheet {
         }
 
         let content = file::scrub(imgcut);
-        let delimiter = file::detect_separator(&content);
+        let delimiter = file::resolve(None, &content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
 
         let mut cursor = usize::from(lines.first().is_some_and(|line| line.trim_start().starts_with('[')));

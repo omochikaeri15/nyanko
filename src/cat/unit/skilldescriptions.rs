@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of skill description text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,18 +37,19 @@ impl SkillDescriptions {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the skill description file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the structured `SkillDescriptions` on success, or a
     /// `SkillDescriptionsError` if the file contained no lines.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SkillDescriptionsError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, SkillDescriptionsError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<SkillDescriptions, SkillDescriptionsError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<SkillDescriptions, SkillDescriptionsError> {
     let file_content = file::scrub(bytes);
-    let separator = file::detect_separator(&file_content);
+    let separator = file::resolve(separator, &file_content);
 
     let mut texts = Vec::new();
 

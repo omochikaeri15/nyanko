@@ -3,7 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::{columns, file};
+use crate::common::tools::columns;
+use crate::common::tools::file::{self, Separator};
 use crate::common::tools::columns::{Column, FromColumn, Scale};
 
 /// Represents errors that can occur during the parsing of a stage layout.
@@ -204,18 +205,19 @@ impl Battleground {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the stage's `stage*.csv` file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `Battleground` on success, or a
     /// `BattlegroundError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, BattlegroundError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, BattlegroundError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<Battleground, BattlegroundError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<Battleground, BattlegroundError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut clean_lines_iterator = file_content.lines().filter_map(|line| {
         let clean = line.split_once("//").map(|(before, _)| before).unwrap_or(line).trim();

@@ -23,8 +23,9 @@ impl error::Error for EnemyNameError {}
 
 /// An enemy's localized display name.
 ///
-/// Developer placeholders such as "ダミー" are rejected, so an unnamed or
-/// placeholder enemy evaluates to `None`.
+/// The file carries no delimiter: every line is one whole name, and several
+/// localized names contain a comma. Developer placeholders such as "ダミー" are
+/// rejected, so an unnamed or placeholder enemy evaluates to `None`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EnemyName {
     /// The parsed display name. `None` if the name is a placeholder or empty.
@@ -35,7 +36,8 @@ impl EnemyName {
     /// Parses the enemy terminology table into one entry per declared enemy.
     ///
     /// Every line contributes an entry, including blank ones, so an entry's
-    /// position in the returned vector is its internal enemy identifier.
+    /// position in the returned vector is its internal enemy identifier. The
+    /// line is taken whole, since the file declares no delimiter.
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the terminology file.
@@ -64,8 +66,8 @@ impl EnemyName {
     }
 }
 
-fn parse_line_data(line: &str, separator: char) -> EnemyName {
-    let raw_name = line.split(separator).next().unwrap_or("").trim().to_string();
+fn parse_line_data(line: &str) -> EnemyName {
+    let raw_name = line.trim().to_string();
     let is_invalid = raw_name.is_empty() || raw_name == "ダミー";
 
     EnemyName {
@@ -75,12 +77,8 @@ fn parse_line_data(line: &str, separator: char) -> EnemyName {
 
 fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyName>, EnemyNameError> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
 
-    let names: Vec<EnemyName> = content
-        .lines()
-        .map(|line| parse_line_data(line, separator))
-        .collect();
+    let names: Vec<EnemyName> = content.lines().map(parse_line_data).collect();
 
     if names.is_empty() {
         return Err(EnemyNameError::EmptyData);
@@ -91,7 +89,20 @@ fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyName>, EnemyNameError> {
 
 fn parse_row_inner(bytes: &[u8], id: usize) -> Option<EnemyName> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
 
-    content.lines().nth(id).map(|line| parse_line_data(line, separator))
+    content.lines().nth(id).map(parse_line_data)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_carrying_a_comma_survives_whole() {
+        let Ok(names) = EnemyName::parse("Chef Bun Bun\nWinged Pigge, le Terrible\n") else {
+            panic!("the terminology file parsed to no entries");
+        };
+
+        assert_eq!(names[1].name.as_deref(), Some("Winged Pigge, le Terrible"));
+        assert_eq!(EnemyName::parse_row("a\nWinged Pigge, le Terrible", 1), Some(names[1].clone()));
+    }
 }

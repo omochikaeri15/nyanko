@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of level growth curves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,18 +87,19 @@ impl LevelCurve {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the `unitlevel.csv` file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed curves keyed by unit identifier on
     /// success, or a `LevelError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u32, Self>, LevelError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<HashMap<u32, Self>, LevelError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, LevelCurve>, LevelError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<HashMap<u32, LevelCurve>, LevelError> {
     let file_content = file::scrub(bytes);
-    let delimiter = file::detect_separator(&file_content);
+    let delimiter = file::resolve(separator, &file_content);
 
     let mut curves = HashMap::new();
 

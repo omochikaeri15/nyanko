@@ -5,6 +5,7 @@
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
 use crate::common::tools::columns;
+use crate::common::tools::file::Separator;
 
 const HEADER_LINES: usize = 2;
 
@@ -16,13 +17,14 @@ const HEADER_LINES: usize = 2;
 ///
 /// # Arguments
 /// * `bytes` - The raw, decrypted byte slice of the `t_unit.csv` file.
+/// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
 ///
 /// # Returns
 /// A `Result` containing the parsed entities indexed by enemy identifier on
 /// success, or an `EntityError` if the file contained no rows wide enough to
 /// be interpreted as combat data.
-pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
-    entity::parse_rows(bytes.as_ref(), HEADER_LINES, from_row)
+pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Vec<Entity>, EntityError> {
+    entity::parse_rows(bytes.as_ref(), HEADER_LINES, separator, from_row)
 }
 
 /// Parses a single row of the shared enemy statistic table by enemy identifier.
@@ -33,13 +35,15 @@ pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
 ///
 /// # Arguments
 /// * `bytes` - The raw, decrypted byte slice of the `t_unit.csv` file.
+/// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
 /// * `id` - The internal enemy identifier, used as a zero-based row offset past the header.
+/// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
 ///
 /// # Returns
 /// An `Option` containing the parsed entity, or `None` if the identifier lies
 /// beyond the end of the table or addresses a row too narrow to be combat data.
-pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Entity> {
-    entity::parse_single(bytes.as_ref(), HEADER_LINES, id, from_row)
+pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize, separator: Option<Separator>) -> Option<Entity> {
+    entity::parse_single(bytes.as_ref(), HEADER_LINES, id, separator, from_row)
 }
 
 /// The column mapping this parser applies, in the order it applies it.

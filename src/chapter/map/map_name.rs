@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of localized map names.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,18 +42,19 @@ impl MapName {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the map name file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `MapName` on success, or a
     /// `MapNameError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, MapNameError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, MapNameError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<MapName, MapNameError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<MapName, MapNameError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut names = HashMap::new();
     let mut has_content = false;

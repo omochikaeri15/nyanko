@@ -3,7 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::{columns, file};
+use crate::common::tools::columns;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur while parsing raw combat statistic rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -416,9 +417,9 @@ fn split_row(line: &str, separator: char) -> Vec<&str> {
     cols
 }
 
-pub(crate) fn parse_rows(bytes: &[u8], skip: usize, from_row: fn(&[&str]) -> Entity) -> Result<Vec<Entity>, EntityError> {
+pub(crate) fn parse_rows(bytes: &[u8], skip: usize, separator: Option<Separator>, from_row: fn(&[&str]) -> Entity) -> Result<Vec<Entity>, EntityError> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
+    let separator = file::resolve(separator, &content);
     let entities: Vec<Entity> = content
         .lines()
         .skip(skip)
@@ -433,9 +434,9 @@ pub(crate) fn parse_rows(bytes: &[u8], skip: usize, from_row: fn(&[&str]) -> Ent
     Ok(entities)
 }
 
-pub(crate) fn parse_single(bytes: &[u8], skip: usize, id: usize, from_row: fn(&[&str]) -> Entity) -> Option<Entity> {
+pub(crate) fn parse_single(bytes: &[u8], skip: usize, id: usize, separator: Option<Separator>, from_row: fn(&[&str]) -> Entity) -> Option<Entity> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
+    let separator = file::resolve(separator, &content);
     let target_line = content.lines().skip(skip).nth(id)?;
     let cols = split_row(target_line, separator);
     if cols.len() < 10 {
@@ -462,20 +463,20 @@ mod tests {
 
     #[test]
     fn comments_never_reach_the_columns() {
-        let expected = unitid::parse(NARROW_ROW).unwrap();
+        let expected = unitid::parse(NARROW_ROW, None).unwrap();
 
         for shape in [
             format!("{NARROW_ROW}, // ねこ占い師"),
             format!("{NARROW_ROW}\t//ネコ杏子"),
             format!("{NARROW_ROW} // ちびタンクネコ"),
         ] {
-            assert_eq!(unitid::parse(&shape).unwrap(), expected);
+            assert_eq!(unitid::parse(&shape, None).unwrap(), expected);
         }
     }
 
     #[test]
     fn a_value_glued_to_a_comment_survives() {
-        let forms = unitid::parse(format!("{NARROW_ROW},5 // my note")).unwrap();
+        let forms = unitid::parse(format!("{NARROW_ROW},5 // my note"), None).unwrap();
         assert_eq!(forms[0].trait_red, 5);
     }
 

@@ -5,6 +5,7 @@
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
 use crate::common::tools::columns;
+use crate::common::tools::file::Separator;
 
 /// Parses a per-unit Cat statistic file into one entity per evolutionary form.
 ///
@@ -14,13 +15,14 @@ use crate::common::tools::columns;
 ///
 /// # Arguments
 /// * `bytes` - The raw, decrypted byte slice of a unit's `unit<id>.csv` file.
+/// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
 ///
 /// # Returns
 /// A `Result` containing the parsed entities in form order on success, or an
 /// `EntityError` if the file contained no rows wide enough to be interpreted
 /// as combat data.
-pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Entity>, EntityError> {
-    entity::parse_rows(bytes.as_ref(), 0, from_row)
+pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Vec<Entity>, EntityError> {
+    entity::parse_rows(bytes.as_ref(), 0, separator, from_row)
 }
 
 /// The column mapping this parser applies, in the order it applies it.

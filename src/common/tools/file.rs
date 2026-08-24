@@ -3,22 +3,85 @@
 //! The engine's data files vary in encoding, line ending, and delimiter between
 //! regions and versions, so every parser normalizes its input through these
 //! helpers before reading any columns.
+//!
+//! Which delimiter a file uses is a property of the file rather than of its
+//! bytes: a localized table is pipe delimited in most languages and comma
+//! delimited in others, and a name carrying a comma makes the two
+//! indistinguishable from the content alone. A parser therefore takes the
+//! delimiter from its caller, and falls back to [`Separator::detect`] only when
+//! the caller states none.
 
-/// Determines the delimiter a raw text payload uses.
-///
-/// # Arguments
-/// * `text` - The sanitized text to probe.
-///
-/// # Returns
-/// A `char` holding the detected delimiter, defaulting to a comma.
-pub fn detect_separator(text: &str) -> char {
-    if text.contains('|') {
-        return '|';
+use serde::{Deserialize, Serialize};
+
+/// A delimiter one of the engine's delimited text files separates its columns with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Separator {
+    /// A vertical bar, used by most localized text tables.
+    Pipe,
+    /// A horizontal tab.
+    Tab,
+    /// A comma, used by the mechanical tables and by the Japanese text tables.
+    Comma,
+}
+
+impl Separator {
+    /// Every delimiter the engine's delimited files are written with.
+    pub const ALL: [Self; 3] = [Self::Pipe, Self::Tab, Self::Comma];
+
+    /// The delimiter a payload appears to be written with.
+    ///
+    /// A bar anywhere in the payload wins outright, and otherwise the first tab
+    /// or comma decides. A file whose first field carries a comma before its
+    /// first real delimiter is therefore misread, which is why a caller that
+    /// knows the file should state the delimiter instead.
+    ///
+    /// # Arguments
+    /// * `text` - The sanitized text to probe.
+    ///
+    /// # Returns
+    /// An `Option` holding the delimiter the payload appears to use, or `None`
+    /// when it carries none of them.
+    pub fn detect(text: &str) -> Option<Self> {
+        if text.contains('|') {
+            return Some(Self::Pipe);
+        }
+
+        text.chars().find_map(|current| match current {
+            '\t' => Some(Self::Tab),
+            ',' => Some(Self::Comma),
+            _ => None,
+        })
     }
 
-    text.chars()
-        .find(|current| matches!(current, '\t' | ','))
-        .unwrap_or(',')
+    /// The character this delimiter is written as.
+    ///
+    /// # Returns
+    /// A `char` holding the delimiter.
+    pub const fn char(self) -> char {
+        match self {
+            Self::Pipe => '|',
+            Self::Tab => '\t',
+            Self::Comma => ',',
+        }
+    }
+
+    /// Splits one line into its columns on this delimiter.
+    ///
+    /// # Arguments
+    /// * `line` - The line to split.
+    ///
+    /// # Returns
+    /// An iterator over the line's columns, exactly as they are written.
+    pub fn split(self, line: &str) -> impl Iterator<Item = &str> {
+        line.split(self.char())
+    }
+}
+
+pub(crate) fn resolve(separator: Option<Separator>, text: &str) -> char {
+    separator
+        .or_else(|| Separator::detect(text))
+        .unwrap_or(Separator::Comma)
+        .char()
 }
 
 /// Converts raw bytes to a string, dropping byte-order marks and null characters
@@ -113,6 +176,7 @@ pub fn strip_html_tags(input: &str, handling: BreakHandling) -> String {
 /// * `key` - The value to match against `search_col`.
 /// * `search_col` - The zero-indexed column to match on.
 /// * `target_col` - The zero-indexed column to extract from the matched row.
+/// * `separator` - The delimiter the table is written with, or `None` to detect it from the content.
 ///
 /// # Returns
 /// An `Option` containing the trimmed value, or `None` if no row matched.
@@ -121,9 +185,10 @@ pub fn lookup(
     key: &str,
     search_col: usize,
     target_col: usize,
+    separator: Option<Separator>,
 ) -> Option<String> {
     let content = scrub(data);
-    let separator = detect_separator(&content);
+    let separator = resolve(separator, &content);
 
     for line in content.lines() {
         let Some(clean_line) = line.split("//").next() else {
@@ -152,4 +217,40 @@ pub fn lookup(
     }
 
     None
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bar_anywhere_outranks_an_earlier_comma() {
+        assert_eq!(Separator::detect("Soracte, mentor mental|text"), Some(Separator::Pipe));
+        assert_eq!(Separator::detect("a\tb,c"), Some(Separator::Tab));
+        assert_eq!(Separator::detect("a,b\tc"), Some(Separator::Comma));
+        assert_eq!(Separator::detect("one whole name"), None);
+    }
+
+    #[test]
+    fn a_stated_delimiter_overrides_the_content() {
+        let shredded = "Soracte, mentor mental|Un mentor.";
+        assert_eq!(Separator::Pipe.split(shredded).count(), 2);
+        assert_eq!(Separator::detect(shredded).map(Separator::char), Some('|'));
+        assert_eq!(resolve(Some(Separator::Comma), shredded), ',');
+        assert_eq!(resolve(None, shredded), '|');
+    }
+
+    #[test]
+    fn detection_falls_back_to_a_comma() {
+        assert_eq!(resolve(None, "one whole name"), ',');
+        assert_eq!(Separator::ALL.map(Separator::char), ['|', '\t', ',']);
+    }
+
+    #[test]
+    fn lookup_reads_the_column_of_the_stated_delimiter() {
+        let table = b"1|Soracte, mentor mental|Un mentor.";
+        assert_eq!(
+            lookup(table, "1", 0, 1, Some(Separator::Pipe)).as_deref(),
+            Some("Soracte, mentor mental"),
+        );
+    }
 }

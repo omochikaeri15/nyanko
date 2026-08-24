@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of localized stage names.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,12 +46,13 @@ impl StageName {
     ///
     /// # Arguments
     /// * `file_bytes` - The raw, decrypted byte slice of the stage name file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `StageName` on success, or a
     /// `StageNameError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(file_bytes: B) -> Result<Self, StageNameError> {
-        parse_inner(file_bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(file_bytes: B, separator: Option<Separator>) -> Result<Self, StageNameError> {
+        parse_inner(file_bytes.as_ref(), separator)
     }
 }
 
@@ -64,9 +65,9 @@ fn is_dummy_string(val: &str) -> bool {
         || clean == "予備"
 }
 
-fn parse_inner(file_bytes: &[u8]) -> Result<StageName, StageNameError> {
+fn parse_inner(file_bytes: &[u8], separator: Option<Separator>) -> Result<StageName, StageNameError> {
     let file_content = file::scrub(file_bytes);
-    let csv_separator = file::detect_separator(&file_content);
+    let csv_separator = file::resolve(separator, &file_content);
 
     let mut parsed_lines: Vec<(usize, Vec<String>)> = Vec::new();
 

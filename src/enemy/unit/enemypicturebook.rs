@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of enemy picture book descriptions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,12 +38,13 @@ impl EnemyPictureBook {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the picture book description file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed descriptions indexed by enemy identifier
     /// on success, or an `EnemyPictureBookError` if the file contained no lines.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Vec<Self>, EnemyPictureBookError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Vec<Self>, EnemyPictureBookError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 
     /// Parses a single row of the enemy picture book table by enemy identifier.
@@ -54,12 +55,13 @@ impl EnemyPictureBook {
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the picture book description file.
     /// * `id` - The internal enemy identifier, used as a zero-based line offset.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// An `Option` containing the parsed description, or `None` if the
     /// identifier lies beyond the end of the table.
-    pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize) -> Option<Self> {
-        parse_row_inner(bytes.as_ref(), id)
+    pub fn parse_row<B: AsRef<[u8]>>(bytes: B, id: usize, separator: Option<Separator>) -> Option<Self> {
+        parse_row_inner(bytes.as_ref(), id, separator)
     }
 }
 
@@ -78,9 +80,9 @@ fn parse_line_data(line: &str, separator: char) -> EnemyPictureBook {
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookError> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
+    let separator = file::resolve(separator, &content);
 
     let descriptions: Vec<EnemyPictureBook> = content
         .lines()
@@ -94,9 +96,9 @@ fn parse_inner(bytes: &[u8]) -> Result<Vec<EnemyPictureBook>, EnemyPictureBookEr
     Ok(descriptions)
 }
 
-fn parse_row_inner(bytes: &[u8], id: usize) -> Option<EnemyPictureBook> {
+fn parse_row_inner(bytes: &[u8], id: usize, separator: Option<Separator>) -> Option<EnemyPictureBook> {
     let content = file::scrub(bytes);
-    let separator = file::detect_separator(&content);
+    let separator = file::resolve(separator, &content);
 
     content.lines().nth(id).map(|line| parse_line_data(line, separator))
 }

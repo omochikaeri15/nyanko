@@ -4,7 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::{columns, file};
+use crate::common::tools::columns;
+use crate::common::tools::file::{self, Separator};
 use crate::common::tools::columns::Column;
 
 /// Represents errors that can occur during the parsing of stage lineup restrictions.
@@ -86,18 +87,19 @@ impl StageOption {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the stage option file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `StageOption` on success, or a
     /// `StageOptionError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, StageOptionError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, StageOptionError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<StageOption, StageOptionError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<StageOption, StageOptionError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut entries: HashMap<u32, Vec<StageOptionEntry>> = HashMap::new();
     let mut has_content = false;

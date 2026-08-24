@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of unit explanation text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,18 +38,19 @@ impl UnitExplanation {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of a unit's explanation `.csv` file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the structured `UnitExplanation` on success, or a
     /// `UnitExplanationError` if the file contained no parseable text.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, UnitExplanationError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, UnitExplanationError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<UnitExplanation, UnitExplanationError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<UnitExplanation, UnitExplanationError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut names: [Option<String>; 4] = [const { None }; 4];
     let mut descriptions: [Option<Vec<String>>; 4] = [const { None }; 4];

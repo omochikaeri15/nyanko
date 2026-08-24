@@ -151,7 +151,7 @@ impl Model {
 
     fn parse_inner(bytes: &[u8]) -> Result<Self, RigError> {
         let content = file::scrub(bytes);
-        let delimiter = file::detect_separator(&content);
+        let delimiter = file::resolve(None, &content);
         let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
 
         if lines.is_empty() { return Err(RigError::EmptyFile); }

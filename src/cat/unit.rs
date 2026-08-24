@@ -17,6 +17,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::combat::{Entity, EntityError};
+use crate::common::tools::file::Separator;
 
 pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
 pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
@@ -139,7 +140,9 @@ impl Unit {
     /// # Arguments
     /// * `id` - The unit's internal identifier, used to key every table lookup.
     /// * `stats` - The raw bytes of the unit's own `unit<id>.csv` combat file.
+    /// * `stats_separator` - The delimiter the combat file is written with, or `None` to detect it from the content.
     /// * `explanation` - The raw bytes of the unit's own localized explanation file.
+    /// * `explanation_separator` - The delimiter the explanation file is written with, or `None` to detect it from the content.
     /// * `attack_frames` - The measured attack animation length for each of the 4 forms, which the caller obtains from the `graphics` feature or leaves as `None`.
     /// * `tables` - Borrowed references to the shared roster tables.
     ///
@@ -149,17 +152,29 @@ impl Unit {
     pub fn assemble(
         id: u32,
         stats: impl AsRef<[u8]>,
+        stats_separator: Option<Separator>,
         explanation: impl AsRef<[u8]>,
+        explanation_separator: Option<Separator>,
         attack_frames: [Option<i32>; 4],
         tables: &Tables<'_>,
     ) -> Result<Self, AssembleError> {
-        Self::assemble_inner(id, stats.as_ref(), explanation.as_ref(), attack_frames, tables)
+        Self::assemble_inner(
+            id,
+            stats.as_ref(),
+            stats_separator,
+            explanation.as_ref(),
+            explanation_separator,
+            attack_frames,
+            tables,
+        )
     }
 
     fn assemble_inner(
         id: u32,
         stats: &[u8],
+        stats_separator: Option<Separator>,
         explanation: &[u8],
+        explanation_separator: Option<Separator>,
         attack_frames: [Option<i32>; 4],
         tables: &Tables<'_>,
     ) -> Result<Self, AssembleError> {
@@ -167,14 +182,14 @@ impl Unit {
             return Err(AssembleError::MissingUnitBuy(id));
         };
 
-        let rows = unitid::parse(stats).map_err(|source| AssembleError::InvalidCombat(id, source))?;
+        let rows = unitid::parse(stats, stats_separator).map_err(|source| AssembleError::InvalidCombat(id, source))?;
 
         let mut combat: [Option<Entity>; 4] = [const { None }; 4];
         for (slot, row) in combat.iter_mut().zip(rows) {
             *slot = Some(row);
         }
 
-        let (names, descriptions) = UnitExplanation::parse(explanation)
+        let (names, descriptions) = UnitExplanation::parse(explanation, explanation_separator)
             .map_or_else(|_| Default::default(), |text| (text.names, text.descriptions));
 
         let talents = tables.talents.get(&id).cloned();
@@ -265,7 +280,9 @@ mod tests {
         let unit = Unit::assemble(
             7,
             stats,
+            None,
             explanation,
+            None,
             [Some(42), None, None, None],
             &tables(&unitbuy, &curves, &talents, &evolve, &costs, &descriptions),
         )
@@ -295,14 +312,14 @@ mod tests {
         let descriptions: Vec<String> = Vec::new();
         let set = tables(&empty_buy, &curves, &talents, &evolve, &costs, &descriptions);
 
-        let outcome = Unit::assemble(404, b"100,1,10,50,20,300,75,60,0,120", "", [None; 4], &set);
+        let outcome = Unit::assemble(404, b"100,1,10,50,20,300,75,60,0,120", None, "", None, [None; 4], &set);
         assert_eq!(outcome.unwrap_err(), AssembleError::MissingUnitBuy(404));
 
         let mut unitbuy = HashMap::new();
         unitbuy.insert(404, UnitBuy::default());
         let set = tables(&unitbuy, &curves, &talents, &evolve, &costs, &descriptions);
 
-        let outcome = Unit::assemble(404, b"", "", [None; 4], &set);
+        let outcome = Unit::assemble(404, b"", None, "", None, [None; 4], &set);
         assert_eq!(outcome.unwrap_err(), AssembleError::InvalidCombat(404, EntityError::EmptyFile));
     }
 
@@ -319,7 +336,9 @@ mod tests {
         let unit = Unit::assemble(
             1,
             b"100,1,10,50,20,300,75,60,0,120",
+            None,
             "",
+            None,
             [None; 4],
             &tables(&unitbuy, &curves, &talents, &evolve, &costs, &descriptions),
         )
@@ -347,12 +366,12 @@ mod tests {
 
     #[test]
     fn blank_lines_do_not_shift_table_keys() {
-        let curves = LevelCurve::parse("10,10\n\n30,30\n").unwrap();
+        let curves = LevelCurve::parse("10,10\n\n30,30\n", None).unwrap();
         assert_eq!(curves[&0].increments, vec![10, 10]);
         assert!(!curves.contains_key(&1));
         assert_eq!(curves[&2].increments, vec![30, 30]);
 
-        let buys = UnitBuy::parse("0,100\n\n0,300\n").unwrap();
+        let buys = UnitBuy::parse("0,100\n\n0,300\n", None).unwrap();
         assert_eq!(buys[&0].purchase_cost, 100);
         assert_eq!(buys[&2].purchase_cost, 300);
     }

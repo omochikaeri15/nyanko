@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::{columns, file};
+use crate::common::tools::columns;
+use crate::common::tools::file::{self, Separator};
 use crate::common::tools::columns::Column;
 
 /// Represents errors that can occur during the parsing of unit progression data.
@@ -475,18 +476,19 @@ impl UnitBuy {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the `unitbuy.csv` file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed rows keyed by unit identifier on
     /// success, or a `UnitBuyError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<HashMap<u32, Self>, UnitBuyError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<HashMap<u32, Self>, UnitBuyError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<HashMap<u32, UnitBuy>, UnitBuyError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<HashMap<u32, UnitBuy>, UnitBuyError> {
     let file_content = file::scrub(bytes);
-    let delimiter = file::detect_separator(&file_content);
+    let delimiter = file::resolve(separator, &file_content);
 
     let mut map = HashMap::new();
 
@@ -583,7 +585,7 @@ mod tests {
     ];
 
     fn parse_one(line: &str) -> UnitBuy {
-        let mut rows = UnitBuy::parse(line).unwrap();
+        let mut rows = UnitBuy::parse(line, None).unwrap();
         rows.remove(&0).unwrap()
     }
 
@@ -747,7 +749,7 @@ mod tests {
 
     #[test]
     fn blank_lines_do_not_shift_unit_identifiers() {
-        let rows = UnitBuy::parse("0,100\n\n0,300\n").unwrap();
+        let rows = UnitBuy::parse("0,100\n\n0,300\n", None).unwrap();
 
         assert_eq!(rows.len(), 2);
         assert_eq!(rows.get(&0).map(|row| row.purchase_cost), Some(100));
@@ -756,6 +758,6 @@ mod tests {
 
     #[test]
     fn a_file_with_no_rows_is_an_error() {
-        assert_eq!(UnitBuy::parse("\n\n").unwrap_err(), UnitBuyError::EmptyFile);
+        assert_eq!(UnitBuy::parse("\n\n", None).unwrap_err(), UnitBuyError::EmptyFile);
     }
 }

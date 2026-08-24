@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of fixed lineup assignments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,18 +64,19 @@ impl FixedFormation {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the fixed formation file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `FixedFormation` on success, or a
     /// `FixedFormationError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, FixedFormationError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, FixedFormationError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<FixedFormation, FixedFormationError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<FixedFormation, FixedFormationError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut lines_iterator = file_content.lines();
 

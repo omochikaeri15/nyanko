@@ -93,10 +93,11 @@ mod tests {
     fn assemble_indexes_every_table_by_id() {
         let combat = t_unit::parse(
             "header one\nheader two\n100,1,10,50,20,300,75,60,0,120\n400,3,20,90,20,300,75,60,0,120\n",
+            None,
         )
         .unwrap();
         let names = EnemyName::parse("Doge\nSnache").unwrap();
-        let book = EnemyPictureBook::parse("0,A small dog\n1,A red snake").unwrap();
+        let book = EnemyPictureBook::parse("0,A small dog\n1,A red snake", None).unwrap();
 
         let tables = Tables { combat: &combat, names: &names, picture_book: &book };
 
@@ -131,9 +132,9 @@ mod tests {
     fn parse_row_agrees_with_the_whole_table() {
         let raw = "header one\nheader two\n100,1,10,50,20,300,75,60,0,120\n400,3,20,90,20,300,75,60,0,120\n";
 
-        let all = t_unit::parse(raw).unwrap();
-        assert_eq!(t_unit::parse_row(raw, 1).as_ref(), all.get(1));
-        assert!(t_unit::parse_row(raw, 99).is_none());
+        let all = t_unit::parse(raw, None).unwrap();
+        assert_eq!(t_unit::parse_row(raw, 1, None).as_ref(), all.get(1));
+        assert!(t_unit::parse_row(raw, 99, None).is_none());
 
         let names = EnemyName::parse("Doge\nSnache").unwrap();
         assert_eq!(EnemyName::parse_row("Doge\nSnache", 1).as_ref(), names.get(1));

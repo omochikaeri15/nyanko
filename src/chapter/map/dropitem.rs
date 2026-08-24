@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file;
+use crate::common::tools::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of map drop tables.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,12 +58,13 @@ impl DropItem {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the drop item file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `DropItem` on success, or a
     /// `DropItemError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, DropItemError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, DropItemError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
@@ -96,9 +97,9 @@ fn extract_u32_array_optional<const SIZE: usize>(parts: &[&str], start_index: us
     result
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<DropItem, DropItemError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<DropItem, DropItemError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut map_drops = HashMap::new();
     let mut has_content = false;

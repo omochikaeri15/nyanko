@@ -7,6 +7,7 @@
 
 use crate::cat::unit::TalentGroup;
 use crate::common::data::img015;
+use crate::common::tools::columns::Scale;
 
 use super::{Entity, Faction};
 
@@ -63,6 +64,76 @@ impl From<i32> for AttrValue {
 /// The three elements are the attribute's display label, its value, and the
 /// unit that value is expressed in.
 pub type Attribute = (&'static str, AttrValue, AttrUnit);
+
+/// The relation between the number a talent declares and the number stored on the entity.
+///
+/// A few talents record the complement of the quantity they describe, so the
+/// stored field and the declared value are not the same number.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub enum Stored {
+    /// The declared value is stored unchanged.
+    Direct,
+    /// The declared value is subtracted from the carried base before it is stored.
+    Inverted(i32),
+}
+
+impl Stored {
+    /// Converts a declared talent value into the number the entity carries.
+    ///
+    /// # Arguments
+    /// * `value` - The value the talent declares at the level being applied.
+    ///
+    /// # Returns
+    /// An `i32` holding the number stored on the entity.
+    pub const fn apply(self, value: i32) -> i32 {
+        match self {
+            Self::Direct => value,
+            Self::Inverted(base) => base - value,
+        }
+    }
+}
+
+/// The meaning of one `(min, max)` value pair a talent group declares.
+///
+/// `SkillAcquisition.csv` gives every talent group four such pairs and names
+/// none of them. This describes one pair by its position: what it measures, and
+/// what the engine does to it on the way into [`Entity`]. It is a different
+/// list from [`Ability::schema`], which describes the attributes an ability
+/// yields rather than the values a talent stores.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub struct TalentValue {
+    /// What this pair measures.
+    pub label: &'static str,
+    /// The unit the pair is expressed in.
+    pub unit: AttrUnit,
+    /// Whether the pair is interpolated across the talent's levels, which is false when only its minimum is read.
+    pub interpolated: bool,
+    /// The conversion applied to the pair on the way into the entity.
+    pub scale: Scale,
+    /// The relation between the declared value and the stored one.
+    pub stored: Stored,
+}
+
+impl TalentValue {
+    const fn new(label: &'static str, unit: AttrUnit) -> Self {
+        Self { label, unit, interpolated: true, scale: Scale::Raw, stored: Stored::Direct }
+    }
+
+    const fn minimum(mut self) -> Self {
+        self.interpolated = false;
+        self
+    }
+
+    const fn scaled(mut self, scale: Scale) -> Self {
+        self.scale = scale;
+        self
+    }
+
+    const fn inverted(mut self, base: i32) -> Self {
+        self.stored = Stored::Inverted(base);
+        self
+    }
+}
 
 /// Identifies a distinct combat ability.
 ///
@@ -291,6 +362,8 @@ pub struct Ability {
     pub description: &'static str,
     /// The labels and units of the attributes `attributes` produces, in the same order.
     pub schema: &'static [(&'static str, AttrUnit)],
+    /// One entry per `(min, max)` value pair `apply_talent` consumes, in pair order.
+    pub talent_values: &'static [TalentValue],
     /// Extracts this ability's attributes from an entity, yielding an empty vector when the entity lacks the ability.
     pub attributes: fn(&Entity) -> Vec<Attribute>,
     /// Applies this ability to an entity as a talent upgrade, when it can be granted as one.
@@ -365,6 +438,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| if stats.area_attack == 0 { active() } else { Vec::new() },
         apply_talent: None,
     },
@@ -375,6 +449,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| if stats.area_attack == 1 { active() } else { Vec::new() },
         apply_talent: None,
     },
@@ -385,6 +460,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.attack_2_damage),
         apply_talent: None,
     },
@@ -395,6 +471,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| {
             if has_long_distance(stats) && !has_omni(stats) { active() } else { Vec::new() }
         },
@@ -407,6 +484,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| if has_omni(stats) { active() } else { Vec::new() },
         apply_talent: None,
     },
@@ -417,6 +495,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_red),
         apply_talent: Some(|stats,_,_,_| stats.trait_red = 1),
     },
@@ -427,6 +506,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_floating),
         apply_talent: Some(|stats,_,_,_| stats.trait_floating = 1),
     },
@@ -437,6 +517,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_dark),
         apply_talent: Some(|stats,_,_,_| stats.trait_dark = 1),
     },
@@ -447,6 +528,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_metal),
         apply_talent: Some(|stats,_,_,_| stats.trait_metal = 1),
     },
@@ -457,6 +539,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_angel),
         apply_talent: Some(|stats,_,_,_| stats.trait_angel = 1),
     },
@@ -467,6 +550,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_alien),
         apply_talent: Some(|stats,_,_,_| stats.trait_alien = 1),
     },
@@ -477,6 +561,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_zombie),
         apply_talent: Some(|stats,_,_,_| stats.trait_zombie = 1),
     },
@@ -487,6 +572,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_relic),
         apply_talent: Some(|stats,_,_,_| stats.trait_relic = 1),
     },
@@ -497,6 +583,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_aku),
         apply_talent: Some(|stats,_,_,_| stats.trait_aku = 1),
     },
@@ -507,6 +594,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_traitless),
         apply_talent: Some(|stats,_,_,_| stats.trait_traitless = 1),
     },
@@ -517,6 +605,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_witch),
         apply_talent: Some(|stats,_,_,_| stats.trait_witch = 1),
     },
@@ -527,6 +616,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_eva),
         apply_talent: Some(|stats,_,_,_| stats.trait_eva = 1),
     },
@@ -537,6 +627,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_dojo),
         apply_talent: None,
     },
@@ -547,6 +638,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| if stats.trait_starred_alien == 1 { active() } else { Vec::new() },
         apply_talent: None,
     },
@@ -557,6 +649,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Type", AttrUnit::None)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.trait_starred_alien >= 2 && stats.trait_starred_alien <= 4 {
                 vec![("Type", AttrValue::Finite(stats.trait_starred_alien), AttrUnit::None)]
@@ -571,6 +664,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_colossus),
         apply_talent: None,
     },
@@ -581,6 +675,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_behemoth),
         apply_talent: None,
     },
@@ -591,6 +686,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_sage),
         apply_talent: None,
     },
@@ -601,6 +697,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.trait_kaijin),
         apply_talent: None,
     },
@@ -611,6 +708,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.attack_only),
         apply_talent: Some(|stats, _, _, _| stats.attack_only = 1),
     },
@@ -621,6 +719,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.strong_against),
         apply_talent: Some(|stats, _, _, _| stats.strong_against = 1),
     },
@@ -631,6 +730,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.massive_damage),
         apply_talent: Some(|stats, _, _, _| stats.massive_damage = 1),
     },
@@ -641,6 +741,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.insane_damage),
         apply_talent: None,
     },
@@ -651,6 +752,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.resist),
         apply_talent: Some(|stats, _, _, _| stats.resist = 1),
     },
@@ -661,6 +763,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.insanely_tough),
         apply_talent: None,
     },
@@ -671,6 +774,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.is_metal),
         apply_talent: Some(|stats,_,_,_| stats.is_metal = 1),
     },
@@ -681,6 +785,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.double_bounty),
         apply_talent: Some(|stats, _, _, _| stats.double_bounty = 1),
     },
@@ -691,6 +796,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.zombie_killer),
         apply_talent: Some(|stats, _, _, _| stats.zombie_killer = 1),
     },
@@ -701,6 +807,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| {
             if stats.soulstrike == 2 || (stats.soulstrike > 0 && stats.zombie_killer > 0) { active() } else { Vec::new() }
         },
@@ -713,6 +820,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.colossus_slayer),
         apply_talent: Some(|stats, _, _, _| stats.colossus_slayer = 1),
     },
@@ -723,6 +831,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.sage_slayer),
         apply_talent: Some(|stats, _, _, _| stats.sage_slayer = 1),
     },
@@ -736,6 +845,7 @@ pub static REGISTRY: &[Ability] = &[
             ("Dodge Chance", AttrUnit::Percent),
             ("Dodge Duration", AttrUnit::Frames),
         ],
+        talent_values: &[TalentValue::new("Dodge Chance", AttrUnit::Percent), TalentValue::new("Dodge Duration", AttrUnit::Frames)],
         attributes: |stats| {
             if stats.behemoth_slayer <= 0 { return Vec::new(); }
             if stats.behemoth_dodge_chance > 0 {
@@ -761,6 +871,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.witch_killer),
         apply_talent: Some(|stats,_,_,_| stats.witch_killer = 1),
     },
@@ -771,6 +882,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.eva_killer),
         apply_talent: Some(|stats,_,_,_| stats.eva_killer = 1),
     },
@@ -781,6 +893,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Damage", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Damage", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.metal_killer_percent > 0 {
                 vec![("Damage", AttrValue::Finite(stats.metal_killer_percent), AttrUnit::Percent)]
@@ -795,6 +908,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.barrier_breaker_chance > 0 {
                 vec![("Chance", AttrValue::Finite(stats.barrier_breaker_chance), AttrUnit::Percent)]
@@ -809,6 +923,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.shield_pierce_chance > 0 {
                 vec![("Chance", AttrValue::Finite(stats.shield_pierce_chance), AttrUnit::Percent)]
@@ -823,6 +938,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Spirit ID", AttrUnit::None)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.conjure_unit_id > -1 {
                 vec![("Spirit ID", AttrValue::Finite(stats.conjure_unit_id), AttrUnit::None)]
@@ -837,6 +953,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.base_destroyer),
         apply_talent: Some(|stats, _, _, _| stats.base_destroyer = 1),
     },
@@ -847,6 +964,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Attacks", AttrUnit::None)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.attack_count_total > -1 && stats.attack_count_state == 2 {
                 vec![("Attacks", AttrValue::Finite(stats.attack_count_total), AttrUnit::None)]
@@ -861,6 +979,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Attacks", AttrUnit::None)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.attack_count_total > -1 && stats.attack_count_state == 0 {
                 vec![("Attacks", AttrValue::Finite(stats.attack_count_total), AttrUnit::None)]
@@ -875,6 +994,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.wave_block),
         apply_talent: Some(|stats, _, _, _| stats.wave_block = 1),
     },
@@ -885,6 +1005,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.counter_surge),
         apply_talent: Some(|stats,_,_,_| stats.counter_surge = 1),
     },
@@ -899,6 +1020,7 @@ pub static REGISTRY: &[Ability] = &[
             ("Level", AttrUnit::None),
             ("Max Reach", AttrUnit::Range),
         ],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Level", AttrUnit::None)],
         attributes: |stats| {
             if stats.mini_wave_flag == 0 && stats.wave_chance > 0 {
                 vec![
@@ -921,6 +1043,7 @@ pub static REGISTRY: &[Ability] = &[
             ("Level", AttrUnit::None),
             ("Max Reach", AttrUnit::Range),
         ],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Level", AttrUnit::None)],
         attributes: |stats| {
             if stats.mini_wave_flag > 0 && stats.wave_chance > 0 {
                 vec![
@@ -944,6 +1067,12 @@ pub static REGISTRY: &[Ability] = &[
             ("Min Range", AttrUnit::Range),
             ("Max Range", AttrUnit::Range),
             ("Width", AttrUnit::Range),
+        ],
+        talent_values: &[
+            TalentValue::new("Chance", AttrUnit::Percent),
+            TalentValue::new("Level", AttrUnit::None),
+            TalentValue::new("Min Range", AttrUnit::Range).minimum().scaled(Scale::Quarter),
+            TalentValue::new("Width", AttrUnit::Range).minimum().scaled(Scale::Quarter),
         ],
         attributes: |stats| {
             if stats.mini_surge_flag == 0 && stats.surge_chance > 0 {
@@ -976,6 +1105,12 @@ pub static REGISTRY: &[Ability] = &[
             ("Max Range", AttrUnit::Range),
             ("Width", AttrUnit::Range),
         ],
+        talent_values: &[
+            TalentValue::new("Chance", AttrUnit::Percent),
+            TalentValue::new("Level", AttrUnit::None),
+            TalentValue::new("Min Range", AttrUnit::Range).minimum().scaled(Scale::Quarter),
+            TalentValue::new("Width", AttrUnit::Range).minimum().scaled(Scale::Quarter),
+        ],
         attributes: |stats| {
             if stats.mini_surge_flag > 0 && stats.surge_chance > 0 {
                 vec![
@@ -1007,6 +1142,11 @@ pub static REGISTRY: &[Ability] = &[
             ("Max Range", AttrUnit::Range),
             ("Width", AttrUnit::Range),
         ],
+        talent_values: &[
+            TalentValue::new("Chance", AttrUnit::Percent),
+            TalentValue::new("Min Range", AttrUnit::Range).minimum().scaled(Scale::Quarter),
+            TalentValue::new("Width", AttrUnit::Range).minimum().scaled(Scale::Quarter),
+        ],
         attributes: |stats| {
             if stats.explosion_chance > 0 {
                 vec![
@@ -1030,6 +1170,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Boost", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Boost", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.savage_blow_chance > 0 {
                 vec![
@@ -1050,6 +1191,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.critical_chance > 0 {
                 vec![("Chance", AttrValue::Finite(stats.critical_chance), AttrUnit::Percent)]
@@ -1064,6 +1206,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("HP", AttrUnit::Percent), ("Boost", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("HP", AttrUnit::Percent).inverted(100), TalentValue::new("Boost", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.strengthen_threshold > 0 {
                 vec![
@@ -1088,6 +1231,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.survive > 0 {
                 vec![("Chance", AttrValue::Finite(stats.survive), AttrUnit::Percent)]
@@ -1102,6 +1246,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Duration", AttrUnit::Frames)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Duration", AttrUnit::Frames)],
         attributes: |stats| {
             if stats.dodge_chance > 0 {
                 vec![
@@ -1119,6 +1264,11 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Reduced To", AttrUnit::Percent), ("Duration", AttrUnit::Frames)],
+        talent_values: &[
+            TalentValue::new("Chance", AttrUnit::Percent),
+            TalentValue::new("Duration", AttrUnit::Frames),
+            TalentValue::new("Reduced To", AttrUnit::Percent).minimum().inverted(100),
+        ],
         attributes: |stats| {
             if stats.weaken_chance > 0 {
                 vec![
@@ -1148,6 +1298,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Duration", AttrUnit::Frames)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Duration", AttrUnit::Frames)],
         attributes: |stats| {
             if stats.freeze_chance > 0 {
                 vec![
@@ -1174,6 +1325,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Duration", AttrUnit::Frames)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Duration", AttrUnit::Frames)],
         attributes: |stats| {
             if stats.slow_chance > 0 {
                 vec![
@@ -1200,6 +1352,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent)],
         attributes: |stats| {
             if stats.knockback_chance > 0 {
                 vec![("Chance", AttrValue::Finite(stats.knockback_chance), AttrUnit::Percent)]
@@ -1214,6 +1367,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Duration", AttrUnit::Frames)],
+        talent_values: &[TalentValue::new("Chance", AttrUnit::Percent), TalentValue::new("Duration", AttrUnit::Frames)],
         attributes: |stats| {
             if stats.curse_chance > 0 {
                 vec![
@@ -1240,6 +1394,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Duration", AttrUnit::Frames), ("Min Distance", AttrUnit::Range), ("Max Distance", AttrUnit::Range)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.warp_chance > 0 {
                 vec![
@@ -1259,6 +1414,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.has_unknown_abilities),
         apply_talent: None,
     },
@@ -1269,6 +1425,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Hitpoints", AttrUnit::None)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.barrier_hitpoints > 0 {
                 vec![("Hitpoints", AttrValue::Finite(stats.barrier_hitpoints), AttrUnit::None)]
@@ -1283,6 +1440,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Hitpoints", AttrUnit::None), ("Regen", AttrUnit::Percent)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.shield_hitpoints > 0 {
                 vec![
@@ -1300,6 +1458,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Count", AttrUnit::None), ("Distance", AttrUnit::Range)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.burrow_amount != 0 {
                 vec![
@@ -1317,6 +1476,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Count", AttrUnit::None), ("Duration", AttrUnit::Frames), ("Hitpoints", AttrUnit::Percent)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.revive_count != 0 {
                 vec![
@@ -1335,6 +1495,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Damage", AttrUnit::Percent)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.toxic_chance > 0 {
                 vec![
@@ -1352,6 +1513,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Chance", AttrUnit::Percent), ("Amount", AttrUnit::Percent)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.drain_chance > 0 {
                 vec![
@@ -1375,6 +1537,7 @@ pub static REGISTRY: &[Ability] = &[
             ("Max Range", AttrUnit::Range),
             ("Width", AttrUnit::Range),
         ],
+        talent_values: &[],
         attributes: |stats| {
             if stats.death_surge_chance > 0 {
                 vec![
@@ -1395,6 +1558,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.wave_immune),
         apply_talent: Some(|stats,_,_,_| stats.wave_immune = 1),
     },
@@ -1405,6 +1569,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.surge_immune),
         apply_talent: Some(|stats,_,_,_| stats.surge_immune = 1),
     },
@@ -1415,6 +1580,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.explosion_immune),
         apply_talent: Some(|stats,_,_,_| stats.explosion_immune = 1),
     },
@@ -1425,6 +1591,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.weaken_immune),
         apply_talent: Some(|stats,_,_,_| stats.weaken_immune = 1),
     },
@@ -1435,6 +1602,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.freeze_immune),
         apply_talent: Some(|stats,_,_,_| stats.freeze_immune = 1),
     },
@@ -1445,6 +1613,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.slow_immune),
         apply_talent: Some(|stats,_,_,_| stats.slow_immune = 1),
     },
@@ -1455,6 +1624,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.knockback_immune),
         apply_talent: Some(|stats,_,_,_| stats.knockback_immune = 1),
     },
@@ -1465,6 +1635,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.curse_immune),
         apply_talent: Some(|stats,_,_,_| stats.curse_immune = 1),
     },
@@ -1475,6 +1646,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.warp_immune),
         apply_talent: Some(|stats,_,_,_| stats.warp_immune = 1),
     },
@@ -1485,6 +1657,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.toxic_immune),
         apply_talent: Some(|stats,_,_,_| stats.toxic_immune = 1),
     },
@@ -1495,6 +1668,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |stats| flag(stats.boss_wave_immune),
         apply_talent: Some(|stats,_,_,_| stats.boss_wave_immune = 1),
     },
@@ -1505,6 +1679,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1515,6 +1690,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1525,6 +1701,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1535,6 +1712,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1545,6 +1723,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1555,6 +1734,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1565,6 +1745,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1575,6 +1756,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1585,6 +1767,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[],
         attributes: |_| Vec::new(),
         apply_talent: Some(|_,_,_,_| {}),
     },
@@ -1595,6 +1778,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Reduction", AttrUnit::None)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, reduction, _, _| stats.eoc1_cost = stats.eoc1_cost.saturating_sub(reduction)),
     },
@@ -1605,6 +1789,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Reduction", AttrUnit::Frames)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, frames, _, _| stats.cooldown = stats.cooldown.saturating_sub(frames)),
     },
@@ -1615,6 +1800,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Increase", AttrUnit::None)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, speed, _, _| stats.speed += speed),
     },
@@ -1625,6 +1811,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Boost", AttrUnit::Percent)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, percent, _, _| {
             let percentage_factor = (100 + percent) as f32 / 100.0;
@@ -1640,6 +1827,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Boost", AttrUnit::Percent)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, percent, _, _| {
             let percentage_factor = (100 + percent) as f32 / 100.0;
@@ -1653,6 +1841,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Reduction", AttrUnit::Percent)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, percent, _, _| {
             let time_reduction = (stats.attack_cooldown as f32 * percent as f32 / 100.0).round() as i32;
@@ -1666,6 +1855,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[],
+        talent_values: &[TalentValue::new("Increase", AttrUnit::None)],
         attributes: |_| Vec::new(),
         apply_talent: Some(|stats, count, _, _| stats.knockbacks += count),
     },
@@ -1676,6 +1866,7 @@ pub static REGISTRY: &[Ability] = &[
         name: "",
         description: "",
         schema: &[("Duration", AttrUnit::Frames)],
+        talent_values: &[],
         attributes: |stats| {
             if stats.time_before_death > -1 {
                 vec![("Duration", AttrValue::Finite(stats.time_before_death), AttrUnit::Frames)]
@@ -1684,3 +1875,80 @@ pub static REGISTRY: &[Ability] = &[
         apply_talent: None,
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_talent_value_addresses_a_declared_pair() {
+        for ability in REGISTRY {
+            assert!(
+                ability.talent_values.len() <= 4,
+                "{:?} describes more pairs than a talent group declares",
+                ability.identity,
+            );
+        }
+    }
+
+    #[test]
+    fn only_appliable_talents_describe_pairs() {
+        for ability in REGISTRY {
+            assert!(
+                ability.talent_values.is_empty() || ability.apply_talent.is_some(),
+                "{:?} describes pairs it never consumes",
+                ability.identity,
+            );
+        }
+    }
+
+    #[test]
+    fn an_inverted_pair_round_trips_through_its_base() {
+        assert_eq!(Stored::Direct.apply(30), 30);
+        assert_eq!(Stored::Inverted(100).apply(30), 70);
+        assert_eq!(Stored::Inverted(100).apply(Stored::Inverted(100).apply(30)), 30);
+    }
+
+    #[test]
+    fn weaken_labels_the_pair_its_closure_reads_third() {
+        let Some(weaken) = get_talent(1) else {
+            panic!("talent 1 grants no ability");
+        };
+
+        let labels: Vec<&str> = weaken.talent_values.iter().map(|value| value.label).collect();
+        assert_eq!(labels, ["Chance", "Duration", "Reduced To"]);
+
+        let Some(reduced_to) = weaken.talent_values.get(2) else {
+            panic!("weaken describes no third pair");
+        };
+        assert!(!reduced_to.interpolated);
+        assert_eq!(reduced_to.stored, Stored::Inverted(100));
+
+        let group = TalentGroup { min_3: 70, ..Default::default() };
+        let mut stats = Entity::default();
+        if let Some(apply) = weaken.apply_talent {
+            apply(&mut stats, 10, 60, &group);
+        }
+        assert_eq!(stats.weaken_to, reduced_to.stored.apply(i32::from(group.min_3)));
+    }
+
+    #[test]
+    fn a_surge_spawn_pair_is_quartered_and_never_interpolated() {
+        let Some(surge) = get_talent(56) else {
+            panic!("talent 56 grants no ability");
+        };
+
+        let group = TalentGroup { min_3: 400, max_3: 800, min_4: 200, max_4: 600, ..Default::default() };
+        let mut stats = Entity::default();
+        if let Some(apply) = surge.apply_talent {
+            apply(&mut stats, 5, 1, &group);
+        }
+
+        let Some(anchor) = surge.talent_values.get(2) else {
+            panic!("surge describes no third pair");
+        };
+        assert!(!anchor.interpolated);
+        assert_eq!(anchor.scale, Scale::Quarter);
+        assert_eq!(stats.surge_spawn_anchor, anchor.scale.apply(i32::from(group.min_3)));
+    }
+}

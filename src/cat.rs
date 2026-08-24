@@ -6,6 +6,7 @@
 
 pub mod unit;
 
+pub use crate::common::tools::file::Separator;
 pub use unit::unitid;
 pub use unit::{
     AssembleError, EvolveMaterial, LevelCurve, LevelError, SkillAcquisitionError,

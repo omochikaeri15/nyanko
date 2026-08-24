@@ -4,7 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::{columns, file};
+use crate::common::tools::columns;
+use crate::common::tools::file::{self, Separator};
 use crate::common::tools::columns::Column;
 
 use super::CostType;
@@ -199,18 +200,19 @@ impl MapStageData {
     ///
     /// # Arguments
     /// * `bytes` - The raw, decrypted byte slice of the map's `MapStageData*.csv` file.
+    /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
     /// A `Result` containing the parsed `MapStageData` on success, or a
     /// `MapStageDataError` if the file contained no parseable rows.
-    pub fn parse<B: AsRef<[u8]>>(bytes: B) -> Result<Self, MapStageDataError> {
-        parse_inner(bytes.as_ref())
+    pub fn parse<B: AsRef<[u8]>>(bytes: B, separator: Option<Separator>) -> Result<Self, MapStageDataError> {
+        parse_inner(bytes.as_ref(), separator)
     }
 }
 
-fn parse_inner(bytes: &[u8]) -> Result<MapStageData, MapStageDataError> {
+fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<MapStageData, MapStageDataError> {
     let file_content = file::scrub(bytes);
-    let separator_char = file::detect_separator(&file_content);
+    let separator_char = file::resolve(separator, &file_content);
 
     let mut lines_iterator = file_content.lines();
     let header = extract_header(
@@ -418,7 +420,7 @@ mod tests {
     #[test]
     fn blank_rows_do_not_shift_stage_indices() {
         let raw = format!("{HEADERS}10,1000,1,0,-1\n\n30,3000,1,0,-1\n");
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.entries.len(), 3);
         assert_eq!(data.entries[0].cost, 10);
@@ -431,7 +433,7 @@ mod tests {
     #[test]
     fn trailing_blank_rows_are_not_padded() {
         let raw = format!("{HEADERS}10,1000,1,0,-1\n20,2000,1,0,-1\n\n\n");
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.entries.len(), 2);
         assert_eq!(data.entries[1].cost, 20);
@@ -440,7 +442,7 @@ mod tests {
     #[test]
     fn dense_files_are_unaffected() {
         let raw = format!("{HEADERS}10,1000,1,0,-1\n20,2000,1,0,-1\n30,3000,1,0,-1\n");
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.entries.len(), 3);
         let energies: Vec<u32> = data.entries.iter().map(|entry| entry.cost).collect();
@@ -450,7 +452,7 @@ mod tests {
     #[test]
     fn header_columns_are_read_from_the_first_two_rows() {
         let raw = "9,-1,-1,4,5,1600,1\n3\n10,1000,1,0,-1\n";
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.header.map_number, 9);
         assert_eq!(data.header.map_condition, 4);
@@ -464,7 +466,7 @@ mod tests {
     #[test]
     fn omitted_header_columns_keep_their_engine_defaults() {
         let raw = "19,-1,-1,-1,-1,    //comment\n1,\t//comment\n10,1000,1,0,-1\n";
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.header.map_number, 19);
         assert_eq!(data.header.map_condition, -1);
@@ -476,7 +478,7 @@ mod tests {
     #[test]
     fn a_single_column_header_still_parses() {
         let raw = "21,\t//comment\n0\n10,1000,1,0,-1\n";
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.header.map_number, 21);
         assert_eq!(data.header.unknown_1, -1);
@@ -487,13 +489,13 @@ mod tests {
     #[test]
     fn trailing_header_columns_keep_their_positions() {
         let raw = "9,-1,-1,-1,-1,0,1,,42\n0\n10,1000,1,0,-1\n";
-        let data = MapStageData::parse(raw).unwrap();
+        let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.header.rest, vec![None, Some(42)]);
     }
 
     #[test]
     fn a_file_with_no_data_rows_is_an_error() {
-        assert_eq!(MapStageData::parse(HEADERS).unwrap_err(), MapStageDataError::EmptyFile);
+        assert_eq!(MapStageData::parse(HEADERS, None).unwrap_err(), MapStageDataError::EmptyFile);
     }
 }
