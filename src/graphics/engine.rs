@@ -390,20 +390,19 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
         high += 1;
     }
 
-    let run = &keyframes[low..=high];
     let mut total: i64 = 0;
 
-    for (outer_offset, outer) in run.iter().enumerate() {
-        let mut term = (outer.value as i64) << POLYNOMIAL_SHIFT;
+    for outer in low..=high {
+        let mut term = (keyframes[outer].value as i64) << POLYNOMIAL_SHIFT;
 
-        for (inner_offset, inner) in run.iter().enumerate() {
-            if outer_offset == inner_offset { continue; }
+        for inner in low..=high {
+            if outer == inner { continue; }
 
-            let divisor = outer.frame.wrapping_sub(inner.frame) as i64;
+            let divisor = keyframes[outer].frame.wrapping_sub(keyframes[inner].frame) as i64;
             if divisor == 0 { continue; }
 
             term = term
-                .wrapping_mul(local.wrapping_sub(inner.frame) as i64)
+                .wrapping_mul(local.wrapping_sub(keyframes[inner].frame) as i64)
                 .wrapping_div(divisor);
         }
 
@@ -421,35 +420,19 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
 /// never collected, and so is never placed in the world.
 fn deployment_order(parts: &[Part]) -> Vec<usize> {
     let mut order = Vec::with_capacity(parts.len());
-    let mut in_frontier = vec![false; parts.len()];
-    let mut collected = Vec::new();
-    let mut root_active = true;
+    let mut frontier = vec![NO_PARENT];
 
-    loop {
-        collected.clear();
+    while !frontier.is_empty() {
+        let mut collected = Vec::new();
 
         for (index, part) in parts.iter().enumerate() {
-            let parent = part.parent();
-            let is_member = if parent == NO_PARENT {
-                root_active
-            } else {
-                usize::try_from(parent).is_ok_and(|at| in_frontier.get(at).copied().unwrap_or(false))
-            };
-
-            if !is_member { continue; }
+            if !frontier.contains(&part.parent()) { continue; }
 
             order.push(index);
-            collected.push(index);
+            collected.push(index as i32);
         }
 
-        if collected.is_empty() { break; }
-
-        root_active = false;
-        in_frontier.fill(false);
-
-        for &index in &collected {
-            in_frontier[index] = true;
-        }
+        frontier = collected;
     }
 
     order
@@ -601,76 +584,4 @@ mod tests {
         assert_eq!(evaluate(&modification, 17), Some(17));
         assert_eq!(evaluate(&modification, 20), Some(20));
     }
-
-    /// The pre-slice, indexed Lagrange sum, kept here only as an oracle the
-    /// bounds-check-eliding `polynomial` is checked against.
-    fn indexed_polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
-        let mut low = index;
-        while low > 0 && keyframes[low - 1].ease == EASE_POLYNOMIAL {
-            low -= 1;
-        }
-
-        let mut high = index + 1;
-        while high + 1 < keyframes.len() && keyframes[high].ease == EASE_POLYNOMIAL {
-            high += 1;
-        }
-
-        let mut total: i64 = 0;
-
-        for outer in low..=high {
-            let mut term = (keyframes[outer].value as i64) << POLYNOMIAL_SHIFT;
-
-            for inner in low..=high {
-                if outer == inner { continue; }
-
-                let divisor = keyframes[outer].frame.wrapping_sub(keyframes[inner].frame) as i64;
-                if divisor == 0 { continue; }
-
-                term = term
-                    .wrapping_mul(local.wrapping_sub(keyframes[inner].frame) as i64)
-                    .wrapping_div(divisor);
-            }
-
-            total = total.wrapping_add(term);
-        }
-
-        (total / (1 << POLYNOMIAL_SHIFT)) as i32
-    }
-
-    #[test]
-    fn polynomial_matches_the_old_indexed_computation() {
-        let keyframes = vec![
-            keyframe(0, 3, EASE_POLYNOMIAL),
-            keyframe(5, 40, EASE_POLYNOMIAL),
-            keyframe(9, 17, EASE_POLYNOMIAL),
-            keyframe(14, -22, EASE_POLYNOMIAL),
-            keyframe(20, 100, EASE_LINEAR),
-        ];
-
-        for local in 1..14 {
-            assert_eq!(
-                polynomial(&keyframes, 1, local),
-                indexed_polynomial(&keyframes, 1, local),
-                "local {local}",
-            );
-        }
-    }
-
-    #[test]
-    fn polynomial_matches_across_the_whole_run_when_the_run_spans_the_slice() {
-        let keyframes = vec![
-            keyframe(0, -5, EASE_POLYNOMIAL),
-            keyframe(3, 12, EASE_POLYNOMIAL),
-            keyframe(8, 9, EASE_POLYNOMIAL),
-        ];
-
-        for local in 1..8 {
-            assert_eq!(
-                polynomial(&keyframes, 0, local),
-                indexed_polynomial(&keyframes, 0, local),
-                "local {local}",
-            );
-        }
-    }
 }
-

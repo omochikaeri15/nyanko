@@ -110,13 +110,14 @@ impl Rig {
 
     /// Calculates the smallest rectangle enclosing the rig across a set of animations.
     ///
-    /// Every frame of every animation is resolved and its visible geometry
-    /// accumulated, so the result encloses the full range of motion rather than
-    /// any single pose. Parts the tolerance judges invisible are excluded.
+    /// Frames are resolved and their visible geometry accumulated, so the result
+    /// encloses the range of motion rather than any single pose. Parts the
+    /// tolerance judges invisible are excluded.
     ///
     /// # Arguments
     /// * `animations` - The animations to sweep. An empty slice measures the rig in its resting pose.
     /// * `tolerance` - A value from zero to one controlling how aggressively marginal parts are discarded, where zero excludes nothing.
+    /// * `frame_limit` - The last frame to measure in each animation, or `None` to sweep every animation in full.
     ///
     /// # Returns
     /// An `Option` containing the enclosing `BoundingBox`, or `None` if no part
@@ -125,8 +126,9 @@ impl Rig {
         &self,
         animations: &[&Animation],
         tolerance: f32,
+        frame_limit: Option<i32>,
     ) -> Option<BoundingBox> {
-        boundary::calculate_animation_bounds(self, animations, Tolerance::new(tolerance))
+        boundary::calculate_animation_bounds(self, animations, Tolerance::new(tolerance), frame_limit)
     }
 
     /// Searches an animation for the shortest interval after which its pose repeats.
