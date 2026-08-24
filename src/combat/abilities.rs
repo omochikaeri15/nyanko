@@ -304,6 +304,8 @@ pub enum Identity {
     ImmuneCurse,
     /// Is wholly unaffected by toxic damage.
     ImmuneToxic,
+    /// Is wholly unaffected by drain effects.
+    ImmuneDrain,
     /// Is wholly unaffected by the warp effect.
     ImmuneWarp,
     /// Is wholly unaffected by the boss wave knockback.
@@ -1660,6 +1662,17 @@ pub static REGISTRY: &[Ability] = &[
         talent_values: &[],
         attributes: |stats| flag(stats.toxic_immune),
         apply_talent: Some(|stats,_,_,_| stats.toxic_immune = 1),
+    },
+    Ability {
+        identity: Identity::ImmuneDrain,
+        talent_id: None,
+        icon_id: Some(img015::ICON_IMMUNE_DRAIN),
+        name: "",
+        description: "",
+        schema: &[],
+        talent_values: &[],
+        attributes: |stats| flag(stats.drain_immune),
+        apply_talent: Some(|stats,_,_,_| stats.drain_immune = 1),
     },
     Ability {
         identity: Identity::ImmuneBossWave,

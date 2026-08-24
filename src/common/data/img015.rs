@@ -193,3 +193,5 @@ pub const ICON_SUPERVILLIAN: usize = 384;
 pub const ICON_RESIST_EXPLOSION: usize = 386;
 /// The sprite index of the drain icon.
 pub const ICON_DRAIN: usize = 389;
+/// The sprite index of the drain immune icon.
+pub const ICON_IMMUNE_DRAIN: usize = 391;
