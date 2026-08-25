@@ -118,6 +118,7 @@ impl Tolerance {
 /// * `animations` - The animations to sweep.
 /// * `tolerance` - The thresholds deciding which parts count towards the result.
 /// * `to_frame` - The last frame to measure in each animation, or `None` to sweep every animation in full.
+/// * `offset` - The index of the alignment row the rig is placed by, or `None` to measure it at the engine's own origin.
 ///
 /// # Returns
 /// An `Option` containing the combined `BoundingBox`, or `None` if no animation
@@ -127,12 +128,13 @@ pub fn calculate_animation_bounds(
     animations: &[&Animation],
     tolerance: Tolerance,
     to_frame: Option<i32>,
+    offset: Option<usize>,
 ) -> Option<BoundingBox> {
     animations.iter().fold(None, |combined, animation| {
         let range = to_frame
             .map(|to| (0, animation.playback_frames().saturating_sub(1).min(to)));
 
-        let measured = scan_bounds(rig, Some(animation), tolerance, range);
+        let measured = scan_bounds(rig, Some(animation), tolerance, range, offset);
 
         match (combined, measured) {
             (Some(combined), Some(measured)) => Some(combined.union(&measured)),
@@ -148,6 +150,7 @@ pub fn calculate_animation_bounds(
 /// * `animation` - The animation to sweep, or `None` to measure the resting pose alone.
 /// * `tolerance` - The thresholds deciding which parts count towards the result.
 /// * `override_range` - An explicit inclusive frame range to scan, replacing the animation's own playback range.
+/// * `offset` - The index of the alignment row the rig is placed by, or `None` to measure it at the engine's own origin.
 ///
 /// # Returns
 /// An `Option` containing the measured `BoundingBox`, or `None` if no part was
@@ -157,6 +160,7 @@ pub fn scan_bounds(
     animation: Option<&Animation>,
     tolerance: Tolerance,
     override_range: Option<(i32, i32)>,
+    offset: Option<usize>,
 ) -> Option<BoundingBox> {
     let (start, end) = override_range.unwrap_or_else(|| {
         (0, animation.map_or(0, |animation| animation.playback_frames().saturating_sub(1)))
@@ -165,7 +169,7 @@ pub fn scan_bounds(
     let mut bounds: Option<BoundingBox> = None;
 
     for frame in start..=end {
-        for part in resolve_frame(rig, animation, frame) {
+        for part in resolve_frame(rig, animation, frame, offset) {
             if part.opacity <= INVISIBLE || part.opacity < tolerance.minimum_opacity { continue; }
             if part.glow > 0 && part.opacity < tolerance.minimum_glow_opacity { continue; }
 

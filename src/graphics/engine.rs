@@ -5,10 +5,11 @@
 //! before child, and sort the parts by depth. Everything but the rotation is
 //! integer arithmetic, and every division truncates toward zero.
 //!
-//! Nothing here is public. [`super::animate`] turns what this produces into the
-//! geometry a caller actually consumes.
+//! Nothing here is public. A final draw pass flattens the placed parts into the
+//! geometry a caller consumes, mirroring the engine's own draw call.
 
-use super::rig::{AnimModification, Animation, Keyframe, Model, ModelPart, SpriteSheet};
+use super::animate::FrameData;
+use super::rig::{AnimModification, Animation, Keyframe, Model, ModelPart, Rig, SpriteSheet};
 
 /// Interpolation applied between a keyframe and the one that follows it.
 const EASE_LINEAR: i32 = 0;
@@ -25,11 +26,17 @@ const NO_PARENT: i32 = -1;
 /// The identifier that marks a part the engine never draws.
 const NOT_DRAWN: i32 = -1;
 
+/// The highest blending mode defined.
+const GLOW_MODES: i32 = 3;
+
+/// The row-major three by three identity, which every part carries.
+pub(super) const IDENTITY: [f32; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+
 /// A whole-pixel position, which is the only precision the engine keeps corners at.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct Point {
-    pub(super) x: i32,
-    pub(super) y: i32,
+struct Point {
+    x: i32,
+    y: i32,
 }
 
 /// The two by three affine the engine composes down the part hierarchy.
@@ -187,17 +194,17 @@ impl Part<'_> {
     }
 
     /// Whether the engine draws this part at all.
-    pub(super) fn drawn(&self) -> bool {
+    fn drawn(&self) -> bool {
         self.id() != NOT_DRAWN
     }
 
     /// The atlas region this part draws, which the caller must still bounds check.
-    pub(super) fn region(&self) -> i32 {
+    fn region(&self) -> i32 {
         self.sprite()
     }
 
     /// The part's four world-space corners, clockwise from the top left.
-    pub(super) fn corners(&self) -> [Point; 4] {
+    fn corners(&self) -> [Point; 4] {
         self.world.corners
     }
 
@@ -205,12 +212,12 @@ impl Part<'_> {
     ///
     /// The engine quantizes here, on an integer divide, and skips the part
     /// entirely when the result is zero.
-    pub(super) fn alpha(&self, opacity_unit: i32) -> i32 {
+    fn alpha(&self, opacity_unit: i32) -> i32 {
         over_unit(self.world.opacity.wrapping_mul(u8::MAX as i32) as i64, opacity_unit) as i32
     }
 
     /// The blending mode the model declares for this part.
-    pub(super) fn glow(&self) -> i32 {
+    fn glow(&self) -> i32 {
         self.rest.glow
     }
 }
@@ -531,6 +538,76 @@ fn deploy(parts: &mut [Part], index: usize, model: &Model, sheet: &SpriteSheet) 
     for corner in &mut part.world.corners {
         *corner = part.world.transform.apply(*corner);
     }
+}
+
+/// Flattens the placed parts into one quad each, in the order they arrive.
+///
+/// A part the engine never draws, one naming an atlas region that does not
+/// exist, and one whose opacity quantizes away to nothing are all dropped, which
+/// is what the engine's own draw call does with each of them.
+///
+/// A blending mode the engine's table does not define leaves the mode the last
+/// part set still in force, since the mode lives on the draw context rather than
+/// on the part.
+pub(super) fn build(parts: &[Part<'_>], rig: &Rig) -> Vec<FrameData> {
+    let sheet = &rig.sheet;
+    let (atlas_width, atlas_height) = sheet.image_data.as_ref()
+        .map_or((1.0, 1.0), |image| (image.width() as f32, image.height() as f32));
+
+    let opacity_unit = rig.model.opacity_unit;
+    let mut frames = Vec::with_capacity(parts.len());
+    let mut glow = 0;
+
+    for part in parts {
+        if !part.drawn() { continue; }
+
+        if part.glow() <= GLOW_MODES {
+            glow = part.glow().max(0) as u8;
+        }
+
+        let alpha = part.alpha(opacity_unit);
+        if alpha == 0 { continue; }
+
+        let Ok(sprite) = usize::try_from(part.region()) else { continue };
+        let Some(cut) = sheet.cuts.get(sprite) else { continue };
+
+        let [top_left, bottom_left, bottom_right, top_right] = part.corners();
+        let corner = |point: Point| [point.x as f32, point.y as f32];
+
+        let near_u = cut.x as f32 / atlas_width;
+        let far_u = cut.x.wrapping_add(cut.width) as f32 / atlas_width;
+        let near_v = cut.y as f32 / atlas_height;
+        let far_v = cut.y.wrapping_add(cut.height) as f32 / atlas_height;
+
+        let mut vertices = [0.0; 12];
+        let mut uvs = [0.0; 12];
+
+        // The engine submits four vertices and indexes them 0 1 2, 3 2 1, so the
+        // two triangles wind this way round. Expanded here because `FrameData`
+        // carries no index buffer.
+        for (slot, (point, texel)) in [
+            (top_left, [near_u, near_v]),
+            (bottom_left, [near_u, far_v]),
+            (top_right, [far_u, near_v]),
+            (bottom_right, [far_u, far_v]),
+            (top_right, [far_u, near_v]),
+            (bottom_left, [near_u, far_v]),
+        ].into_iter().enumerate() {
+            vertices[2 * slot..2 * slot + 2].copy_from_slice(&corner(point));
+            uvs[2 * slot..2 * slot + 2].copy_from_slice(&texel);
+        }
+
+        frames.push(FrameData {
+            sprite_index: sprite,
+            final_matrix: IDENTITY,
+            vertices,
+            uvs,
+            opacity: alpha as f32 / u8::MAX as f32,
+            glow,
+        });
+    }
+
+    frames
 }
 
 #[cfg(test)]
