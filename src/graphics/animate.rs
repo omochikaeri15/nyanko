@@ -5,7 +5,7 @@
 //! this places the result where the caller asked for it.
 
 use super::engine;
-use super::rig::{Animation, Rig};
+use super::rig::{Animation, Model, Rig};
 
 /// One part of a rig, resolved into renderer-ready geometry for a single frame.
 ///
@@ -67,16 +67,27 @@ pub fn resolve_frame(
     let parts = engine::resolve(&rig.model, anim, frame, &rig.sheet);
     let mut frames = engine::build(&parts, rig);
 
-    if let Some(alignment) = offset.and_then(|row| rig.model.alignment.get(row)) {
-        shift(&mut frames, alignment.x, alignment.y);
+    if let Some(row) = offset {
+        shift(&mut frames, &rig.model, row);
     }
 
     frames
 }
 
-/// Translates every vertex by an alignment row, which states its offset negated.
-fn shift(frames: &mut [FrameData], x: i32, y: i32) {
-    let (x, y) = (-(x as f32), -(y as f32));
+/// Translates every vertex by an alignment row, which the row states negated.
+///
+/// The row is authored against the root part's pivot and in the root's own
+/// space, so the pivot joins the offset before the root's resting scale carries
+/// the pair onto the screen. The root's own authored position takes no part in
+/// it.
+fn shift(frames: &mut [FrameData], model: &Model, row: usize) {
+    let Some(align) = model.alignment.get(row) else { return };
+    let Some(root) = model.parts.first() else { return };
+
+    let unit = if model.scale_unit == 0 { 1000.0 } else { model.scale_unit as f32 };
+
+    let x = (-(align.x as f32) + root.pivot_x as f32) * (root.scale_x as f32 / unit);
+    let y = (-(align.y as f32) + root.pivot_y as f32) * (root.scale_y as f32 / unit);
 
     for frame in frames {
         for corner in frame.vertices.chunks_exact_mut(2) {
