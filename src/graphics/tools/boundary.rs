@@ -191,7 +191,7 @@ pub fn scan_bounds(
 
             let mut measured = BoundingBox { min_x: f32::MAX, min_y: f32::MAX, max_x: f32::MIN, max_y: f32::MIN };
 
-            for at in [0, 1, 2, 5] {
+            for at in [0, 1, 2, 3] {
                 let (x, y) = corner(at);
 
                 measured.min_x = measured.min_x.min(x);

@@ -18,20 +18,28 @@ use super::rig::{Animation, Model, Rig};
 /// them to whole pixels, so `vertices` already holds that result and
 /// `final_matrix` is the identity. It is kept so a consumer can still impose a
 /// per-part transform of its own.
+///
+/// The four corners arrive in the order the engine submits them, which is the
+/// order [`FrameData::INDICES`] draws two triangles from.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FrameData {
     /// The index of the sprite region in the rig's atlas that this part draws.
     pub sprite_index: usize,
     /// The identity, since the engine bakes each part's transform into `vertices`.
     pub final_matrix: [f32; 9],
-    /// The part's corner positions as six consecutive x and y pairs forming two triangles.
-    pub vertices: [f32; 12],
-    /// The texture coordinates matching `vertices`, as six consecutive u and v pairs.
-    pub uvs: [f32; 12],
+    /// The part's corner positions as four consecutive x and y pairs.
+    pub vertices: [f32; 8],
+    /// The texture coordinates matching `vertices`, as four consecutive u and v pairs.
+    pub uvs: [f32; 8],
     /// The part's resolved opacity, from fully transparent at zero to fully opaque at one.
     pub opacity: f32,
     /// The blending mode to draw the part with, where zero is ordinary alpha blending.
     pub glow: u8,
+}
+
+impl FrameData {
+    /// The order the engine indexes a quad's four vertices in to draw it as two triangles.
+    pub const INDICES: [u16; 6] = engine::INDICES;
 }
 
 impl Default for FrameData {
@@ -39,8 +47,8 @@ impl Default for FrameData {
         Self {
             sprite_index: 0,
             final_matrix: engine::IDENTITY,
-            vertices: [0.0; 12],
-            uvs: [0.0; 12],
+            vertices: [0.0; 8],
+            uvs: [0.0; 8],
             opacity: 0.0,
             glow: 0,
         }

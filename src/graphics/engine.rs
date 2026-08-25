@@ -32,6 +32,9 @@ const GLOW_MODES: i32 = 3;
 /// The row-major three by three identity, which every part carries.
 pub(super) const IDENTITY: [f32; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
 
+/// The order the engine indexes a quad's four vertices in, drawing two triangles.
+pub(super) const INDICES: [u16; 6] = [0, 1, 2, 3, 2, 1];
+
 /// A whole-pixel position, which is the only precision the engine keeps corners at.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Point {
@@ -549,6 +552,11 @@ fn deploy(parts: &mut [Part], index: usize, model: &Model, sheet: &SpriteSheet) 
 /// A blending mode the engine's table does not define leaves the mode the last
 /// part set still in force, since the mode lives on the draw context rather than
 /// on the part.
+///
+/// The four corners are emitted in the order the engine submits them, pairing
+/// the near edge of the cut rect with the left corners and the far edge with the
+/// right, so a consumer drawing them through [`FrameData::INDICES`] reproduces
+/// the engine's own two triangles and its winding.
 pub(super) fn build(parts: &[Part<'_>], rig: &Rig) -> Vec<FrameData> {
     let sheet = &rig.sheet;
     let (atlas_width, atlas_height) = sheet.image_data.as_ref()
@@ -572,36 +580,27 @@ pub(super) fn build(parts: &[Part<'_>], rig: &Rig) -> Vec<FrameData> {
         let Some(cut) = sheet.cuts.get(sprite) else { continue };
 
         let [top_left, bottom_left, bottom_right, top_right] = part.corners();
-        let corner = |point: Point| [point.x as f32, point.y as f32];
 
         let near_u = cut.x as f32 / atlas_width;
         let far_u = cut.x.wrapping_add(cut.width) as f32 / atlas_width;
         let near_v = cut.y as f32 / atlas_height;
         let far_v = cut.y.wrapping_add(cut.height) as f32 / atlas_height;
 
-        let mut vertices = [0.0; 12];
-        let mut uvs = [0.0; 12];
-
-        // The engine submits four vertices and indexes them 0 1 2, 3 2 1, so the
-        // two triangles wind this way round. Expanded here because `FrameData`
-        // carries no index buffer.
-        for (slot, (point, texel)) in [
-            (top_left, [near_u, near_v]),
-            (bottom_left, [near_u, far_v]),
-            (top_right, [far_u, near_v]),
-            (bottom_right, [far_u, far_v]),
-            (top_right, [far_u, near_v]),
-            (bottom_left, [near_u, far_v]),
-        ].into_iter().enumerate() {
-            vertices[2 * slot..2 * slot + 2].copy_from_slice(&corner(point));
-            uvs[2 * slot..2 * slot + 2].copy_from_slice(&texel);
-        }
-
         frames.push(FrameData {
             sprite_index: sprite,
             final_matrix: IDENTITY,
-            vertices,
-            uvs,
+            vertices: [
+                top_left.x as f32, top_left.y as f32,
+                bottom_left.x as f32, bottom_left.y as f32,
+                top_right.x as f32, top_right.y as f32,
+                bottom_right.x as f32, bottom_right.y as f32,
+            ],
+            uvs: [
+                near_u, near_v,
+                near_u, far_v,
+                far_u, near_v,
+                far_u, far_v,
+            ],
             opacity: alpha as f32 / u8::MAX as f32,
             glow,
         });
