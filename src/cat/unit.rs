@@ -1,6 +1,9 @@
-//! Cat unit data: the aggregate [`Unit`], the tables it draws on, and the
-//! parsers behind them.
+//! Cat unit data: the aggregate [`Unit`], the tables it draws on, the parsers
+//! behind them.
 
+mod nyancombo;
+mod nyancombodata;
+mod nyancomboparam;
 mod skillacquisition;
 mod skilldescriptions;
 mod skilllevel;
@@ -19,6 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::combat::{Entity, EntityError};
 use crate::common::tools::file::Separator;
 
+pub use nyancombo::{Nyancombo, NyancomboError};
+pub use nyancombodata::{ComboSlot, ComboStrength, NyancomboData, NyancomboDataError};
+pub use nyancomboparam::{NyancomboParam, NyancomboParamError};
 pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
 pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};
 pub use skilllevel::{SkillLevelError, TalentCost};

@@ -2,8 +2,9 @@ use std::error;
 use std::fmt;
 
 use crate::cat::{
-    AssembleError, LevelError, SkillAcquisitionError, SkillDescriptionsError, SkillLevelError,
-    UnitBuyError, UnitEvolveError, UnitExplanationError,
+    AssembleError, LevelError, NyancomboDataError, NyancomboError, NyancomboParamError,
+    SkillAcquisitionError, SkillDescriptionsError, SkillLevelError, UnitBuyError, UnitEvolveError,
+    UnitExplanationError,
 };
 use crate::chapter::map::{
     DropItemError, ExOptionError, LockSkipDataError, MapNameError, MapOptionError,
@@ -33,6 +34,12 @@ pub enum Error {
     Assemble(AssembleError),
     /// The unit progression table could not be parsed.
     UnitBuy(UnitBuyError),
+    /// The unit combo table could not be parsed.
+    NyancomboData(NyancomboDataError),
+    /// A localized combo text table could not be parsed.
+    Nyancombo(NyancomboError),
+    /// The combo magnitude table could not be parsed.
+    NyancomboParam(NyancomboParamError),
     /// The evolution text table could not be parsed.
     UnitEvolve(UnitEvolveError),
     /// A unit explanation file could not be parsed.
@@ -106,6 +113,9 @@ impl Error {
             Self::Entity(source) => source,
             Self::Assemble(source) => source,
             Self::UnitBuy(source) => source,
+            Self::NyancomboData(source) => source,
+            Self::Nyancombo(source) => source,
+            Self::NyancomboParam(source) => source,
             Self::UnitEvolve(source) => source,
             Self::UnitExplanation(source) => source,
             Self::Level(source) => source,
@@ -171,6 +181,24 @@ impl From<AssembleError> for Error {
 impl From<UnitBuyError> for Error {
     fn from(source: UnitBuyError) -> Self {
         Self::UnitBuy(source)
+    }
+}
+
+impl From<NyancomboDataError> for Error {
+    fn from(source: NyancomboDataError) -> Self {
+        Self::NyancomboData(source)
+    }
+}
+
+impl From<NyancomboError> for Error {
+    fn from(source: NyancomboError) -> Self {
+        Self::Nyancombo(source)
+    }
+}
+
+impl From<NyancomboParamError> for Error {
+    fn from(source: NyancomboParamError) -> Self {
+        Self::NyancomboParam(source)
     }
 }
 

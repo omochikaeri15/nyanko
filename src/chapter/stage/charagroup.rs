@@ -53,6 +53,12 @@ impl From<u32> for CharaGroupType {
 pub struct CharaGroupEntry {
     /// The group's own identifier, referenced by the stages that apply it.
     pub id: u32,
+    /// The localization key naming the restriction, or `None` when the row states none.
+    ///
+    /// Resolve it through a `Localizable` dictionary to obtain the line the game
+    /// prints alongside the restriction, such as the one qualifying a combo that
+    /// applies to only part of the roster.
+    pub text_id: Option<String>,
     /// How the listed units constrain the player's lineup.
     pub kind: CharaGroupType,
     /// The identifiers of the units the restriction lists.
@@ -110,6 +116,12 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<CharaGroup,
         let Some(id_str) = parts.first() else { continue; };
         let Ok(id) = id_str.trim().parse::<u32>() else { continue; };
 
+        let text_id = parts
+            .get(1)
+            .map(|key| key.trim())
+            .filter(|key| !key.is_empty())
+            .map(str::to_owned);
+
         let Some(kind_str) = parts.get(2) else { continue; };
         let parsed_kind = kind_str.trim().parse::<u32>().unwrap_or(0);
 
@@ -124,6 +136,7 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<CharaGroup,
             id,
             CharaGroupEntry {
                 id,
+                text_id,
                 kind: CharaGroupType::from(parsed_kind),
                 units,
             },
@@ -135,4 +148,51 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<CharaGroup,
     }
 
     Ok(CharaGroup { groups })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The header and two real rows of a `Charagroup.csv`, the second of which
+    /// scopes a Cat combo rather than a stage.
+    const REAL_TABLE: &str = "//group_id,text_id,group_type,chara_id\n\
+        1,stage_restriction_charagroup_1,0,249,250,251\n\
+        10,Nyancombo_charagroup_1,3,831,832,833,834,835,836,857,858";
+
+    fn parse_one(table: &str, id: u32) -> CharaGroupEntry {
+        CharaGroup::parse(table, None).unwrap().groups.remove(&id).unwrap()
+    }
+
+    #[test]
+    fn a_real_row_lands_column_for_column() {
+        let stage = parse_one(REAL_TABLE, 1);
+
+        assert_eq!(stage.id, 1);
+        assert_eq!(stage.text_id.as_deref(), Some("stage_restriction_charagroup_1"));
+        assert_eq!(stage.kind, CharaGroupType::OnlyUse);
+        assert_eq!(stage.units, [249, 250, 251]);
+    }
+
+    #[test]
+    fn a_combo_row_keeps_the_key_that_names_its_restriction() {
+        let combo = parse_one(REAL_TABLE, 10);
+
+        assert_eq!(combo.text_id.as_deref(), Some("Nyancombo_charagroup_1"));
+        assert_eq!(combo.kind, CharaGroupType::Unknown(3));
+        assert_eq!(combo.units, [831, 832, 833, 834, 835, 836, 857, 858]);
+    }
+
+    #[test]
+    fn a_row_naming_no_restriction_reads_as_absent() {
+        let entry = parse_one("//header\n4,,2,626", 4);
+
+        assert_eq!(entry.text_id, None);
+        assert_eq!(entry.kind, CharaGroupType::CannotUse);
+    }
+
+    #[test]
+    fn a_file_without_rows_is_rejected() {
+        assert_eq!(CharaGroup::parse("", None), Err(CharaGroupError::EmptyFile));
+    }
 }
