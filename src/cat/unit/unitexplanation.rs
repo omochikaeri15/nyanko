@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::tools::file::{self, Separator};
+use crate::common::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of unit explanation text.
 #[derive(Debug, Clone, PartialEq, Eq)]

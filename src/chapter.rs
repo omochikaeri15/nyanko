@@ -8,7 +8,7 @@ pub mod category;
 pub mod stage;
 pub mod map;
 
-pub use crate::common::tools::file::Separator;
+pub use crate::common::Separator;
 pub use category::Category;
 pub use stage::Stage;
 pub use map::Map;

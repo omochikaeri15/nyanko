@@ -4,9 +4,9 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::columns;
-use crate::common::tools::file::{self, Separator};
-use crate::common::tools::columns::Column;
+use crate::common::columns;
+use crate::common::file::{self, Separator};
+use crate::common::columns::Column;
 
 /// Represents errors that can occur during the parsing of stage lineup restrictions.
 #[derive(Debug, Clone, PartialEq, Eq)]

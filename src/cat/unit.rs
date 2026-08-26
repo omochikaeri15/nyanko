@@ -3,6 +3,7 @@
 
 mod nyancombo;
 mod nyancombodata;
+mod nyancombofilter;
 mod nyancomboparam;
 mod skillacquisition;
 mod skilldescriptions;
@@ -20,10 +21,11 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::combat::{Entity, EntityError};
-use crate::common::tools::file::Separator;
+use crate::common::file::Separator;
 
 pub use nyancombo::{Nyancombo, NyancomboError};
 pub use nyancombodata::{ComboSlot, ComboStrength, NyancomboData, NyancomboDataError};
+pub use nyancombofilter::{NyancomboFilter, NyancomboFilterError};
 pub use nyancomboparam::{NyancomboParam, NyancomboParamError};
 pub use skillacquisition::{SkillAcquisitionError, Talent, TalentGroup};
 pub use skilldescriptions::{SkillDescriptions, SkillDescriptionsError};

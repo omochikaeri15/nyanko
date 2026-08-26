@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::common::tools::file;
+use crate::common::file;
 
 /// Represents errors that can occur during the parsing of localized enemy names.
 #[derive(Debug, Clone, PartialEq, Eq)]

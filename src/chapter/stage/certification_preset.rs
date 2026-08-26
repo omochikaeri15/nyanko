@@ -6,7 +6,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::common::tools::file::scrub;
+use crate::common::file::scrub;
 
 /// Represents errors that can occur during the parsing of a fixed lineup preset.
 #[derive(Debug, Clone, PartialEq, Eq)]

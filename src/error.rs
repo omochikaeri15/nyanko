@@ -2,9 +2,9 @@ use std::error;
 use std::fmt;
 
 use crate::cat::{
-    AssembleError, LevelError, NyancomboDataError, NyancomboError, NyancomboParamError,
-    SkillAcquisitionError, SkillDescriptionsError, SkillLevelError, UnitBuyError, UnitEvolveError,
-    UnitExplanationError,
+    AssembleError, LevelError, NyancomboDataError, NyancomboError, NyancomboFilterError,
+    NyancomboParamError, SkillAcquisitionError, SkillDescriptionsError, SkillLevelError,
+    UnitBuyError, UnitEvolveError, UnitExplanationError,
 };
 use crate::chapter::map::{
     DropItemError, ExOptionError, LockSkipDataError, MapNameError, MapOptionError,
@@ -16,7 +16,7 @@ use crate::chapter::stage::{
     StageOptionError,
 };
 use crate::combat::EntityError;
-use crate::common::data::{LocalizableError, ParamError};
+use crate::files::{GatyaItemBuyError, GatyaItemNameError, LocalizableError, ParamError};
 use crate::enemy::{EnemyNameError, EnemyPictureBookError};
 
 /// A single error type spanning every parser in the crate.
@@ -40,6 +40,8 @@ pub enum Error {
     Nyancombo(NyancomboError),
     /// The combo magnitude table could not be parsed.
     NyancomboParam(NyancomboParamError),
+    /// The combo category tab table could not be parsed.
+    NyancomboFilter(NyancomboFilterError),
     /// The evolution text table could not be parsed.
     UnitEvolve(UnitEvolveError),
     /// A unit explanation file could not be parsed.
@@ -96,6 +98,10 @@ pub enum Error {
     Localizable(LocalizableError),
     /// A parameter file could not be parsed.
     Param(ParamError),
+    /// The item catalogue could not be parsed.
+    GatyaItemBuy(GatyaItemBuyError),
+    /// A localized item text table could not be parsed.
+    GatyaItemName(GatyaItemNameError),
     /// A unit's rig or animation data could not be parsed.
     #[cfg(feature = "graphics")]
     Rig(crate::graphics::rig::RigError),
@@ -116,6 +122,7 @@ impl Error {
             Self::NyancomboData(source) => source,
             Self::Nyancombo(source) => source,
             Self::NyancomboParam(source) => source,
+            Self::NyancomboFilter(source) => source,
             Self::UnitEvolve(source) => source,
             Self::UnitExplanation(source) => source,
             Self::Level(source) => source,
@@ -144,6 +151,8 @@ impl Error {
             Self::SpecialRulesMapOption(source) => source,
             Self::Localizable(source) => source,
             Self::Param(source) => source,
+            Self::GatyaItemBuy(source) => source,
+            Self::GatyaItemName(source) => source,
             #[cfg(feature = "graphics")]
             Self::Rig(source) => source,
             #[cfg(feature = "pack")]
@@ -199,6 +208,12 @@ impl From<NyancomboError> for Error {
 impl From<NyancomboParamError> for Error {
     fn from(source: NyancomboParamError) -> Self {
         Self::NyancomboParam(source)
+    }
+}
+
+impl From<NyancomboFilterError> for Error {
+    fn from(source: NyancomboFilterError) -> Self {
+        Self::NyancomboFilter(source)
     }
 }
 
@@ -367,6 +382,18 @@ impl From<LocalizableError> for Error {
 impl From<ParamError> for Error {
     fn from(source: ParamError) -> Self {
         Self::Param(source)
+    }
+}
+
+impl From<GatyaItemBuyError> for Error {
+    fn from(source: GatyaItemBuyError) -> Self {
+        Self::GatyaItemBuy(source)
+    }
+}
+
+impl From<GatyaItemNameError> for Error {
+    fn from(source: GatyaItemNameError) -> Self {
+        Self::GatyaItemName(source)
     }
 }
 

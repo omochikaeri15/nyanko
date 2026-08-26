@@ -3,8 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::columns;
-use crate::common::tools::file::{self, Separator};
+use crate::common::columns;
+use crate::common::file::{self, Separator};
 
 /// Represents errors that can occur while parsing raw combat statistic rows.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file::scrub;
+use crate::common::file::scrub;
 
 /// Represents errors that can occur during the parsing of score bonus rules.
 #[derive(Debug, Clone, PartialEq, Eq)]

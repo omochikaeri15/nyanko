@@ -3,9 +3,9 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::columns;
-use crate::common::tools::file::{self, Separator};
-use crate::common::tools::columns::{Column, FromColumn, Scale};
+use crate::common::columns;
+use crate::common::file::{self, Separator};
+use crate::common::columns::{Column, FromColumn, Scale};
 
 /// Represents errors that can occur during the parsing of a stage layout.
 #[derive(Debug, Clone, PartialEq, Eq)]

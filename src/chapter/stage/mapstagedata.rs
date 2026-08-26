@@ -1,12 +1,17 @@
 //! Map-wide and per-stage cost, music, and reward metadata.
+//!
+//! Two files are written in this layout. Every map outside the story chapters
+//! declares its stages in a `MapStageData*.csv`, and the three story chapters
+//! declare theirs in a `stageNormal*.csv`, which closes its table with a row
+//! carrying nothing but the absent sentinel and documents its own columns in a
+//! comment block below that row.
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::columns;
-use crate::common::tools::file::{self, Separator};
-use crate::common::tools::columns::Column;
+use crate::common::columns::{self, Column};
+use crate::common::file::{self, Separator};
 
 use super::CostType;
 
@@ -40,10 +45,10 @@ impl std::error::Error for MapStageDataError {}
 pub struct MapStageDataHeader {
     /// The map number the engine files this map under.
     pub map_number: i32,
-    /// A column present in the raw data whose effect on the engine is not established.
-    pub unknown_1: i32,
-    /// A column present in the raw data whose effect on the engine is not established.
-    pub unknown_2: i32,
+    /// The identifier of the map's item reward stage configuration, or negative one when it declares none.
+    pub item_reward_setting: i32,
+    /// The identifier of the map's score reward stage configuration, or negative one when it declares none.
+    pub score_reward_setting: i32,
     /// The identifier of the map-wide clear condition, or negative one when there is none.
     pub map_condition: i32,
     /// The identifier of the per-stage clear condition, or negative one when there is none.
@@ -71,13 +76,13 @@ impl MapStageDataHeader {
     /// comes from the second row rather than from this table.
     pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
         absent -1;
-        map_number          : 0;
-        unknown_1           : 1;
-        unknown_2           : 2;
-        map_condition       : 3;
-        stage_condition     : 4;
-        user_rank_threshold : 5, Raw, 0;
-        cost_type           : 6;
+        map_number           : 0;
+        item_reward_setting  : 1;
+        score_reward_setting : 2;
+        map_condition        : 3;
+        stage_condition      : 4;
+        user_rank_threshold  : 5, Raw, 0;
+        cost_type            : 6;
     };
 }
 
@@ -89,8 +94,8 @@ impl Default for MapStageDataHeader {
     fn default() -> Self {
         Self {
             map_number: -1,
-            unknown_1: -1,
-            unknown_2: -1,
+            item_reward_setting: -1,
+            score_reward_setting: -1,
             map_condition: -1,
             stage_condition: -1,
             user_rank_threshold: 0,
@@ -196,10 +201,11 @@ impl MapStageData {
     /// a score ladder according to the row's declared rule.
     ///
     /// An unreadable row yields a default entry rather than being dropped, so an
-    /// entry's position is always its stage index.
+    /// entry's position is always its stage index. A row carrying nothing but the
+    /// absent sentinel closes the table, and everything below it is left unread.
     ///
     /// # Arguments
-    /// * `bytes` - The raw, decrypted byte slice of the map's `MapStageData*.csv` file.
+    /// * `bytes` - The raw, decrypted byte slice of the map's `MapStageData*.csv` or `stageNormal*.csv` file.
     /// * `separator` - The delimiter the file is written with, or `None` to detect it from the content.
     ///
     /// # Returns
@@ -230,9 +236,13 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<MapStageDat
             continue;
         }
 
+        let parts: Vec<&str> = trimmed_line.split(separator_char).collect();
+        if is_terminator(&parts) {
+            break;
+        }
+
         has_content = true;
 
-        let parts: Vec<&str> = trimmed_line.split(separator_char).collect();
         if parts.len() < 2 {
             continue;
         }
@@ -270,6 +280,12 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<MapStageDat
 
 fn strip_comment(line: &str) -> &str {
     line.split_once("//").map_or(line, |(before_comment, _)| before_comment)
+}
+
+fn is_terminator(parts: &[&str]) -> bool {
+    let mut written = parts.iter().map(|part| part.trim()).filter(|part| !part.is_empty());
+
+    written.next() == Some("-1") && written.next().is_none()
 }
 
 fn extract_header(
@@ -481,7 +497,7 @@ mod tests {
         let data = MapStageData::parse(raw, None).unwrap();
 
         assert_eq!(data.header.map_number, 21);
-        assert_eq!(data.header.unknown_1, -1);
+        assert_eq!(data.header.item_reward_setting, -1);
         assert_eq!(data.header.stage_condition, -1);
         assert_eq!(data.entries.len(), 1);
     }
@@ -494,8 +510,58 @@ mod tests {
         assert_eq!(data.header.rest, vec![None, Some(42)]);
     }
 
+    /// The opening of a real `stageNormal1_0.csv`, whose score ladder replaces
+    /// the treasure pool, closed by the sentinel row and its comment block.
+    const STORY_CHAPTER: &str = concat!(
+        "-1,-1,-1,\t\t\t\t\t//マップ番号 0～16,　アイテム報酬型ステージ設定(-1:OFF),　スコア報酬型ステージ設定(-1:OFF)\n",
+        "-1,\t\t\t\t\t\t\t\t//マップパターン 0～\n",
+        "30,0,48,99,33,0,1,1,-2,-2,-2,-2,-2,-2,-2,1,8500,13,10,5000,3,1,-1,     //0沈没日本\n",
+        "30,0,3,100,3,0,1,1,-2,-2,-2,-2,-2,-2,-2,1,8500,13,10,5000,6,25000,-1,     //1韓国\n",
+        "-1,\n",
+        "\n",
+        "//消費統率力\t\t\t0\n",
+        "//クリア時の獲得XP\t\t1\n",
+    );
+
+    #[test]
+    fn a_story_chapter_reads_as_the_layout_it_shares() {
+        let data = MapStageData::parse(STORY_CHAPTER, None).unwrap();
+
+        assert_eq!(data.header.map_number, -1);
+        assert_eq!(data.header.item_reward_setting, -1);
+        assert_eq!(data.header.score_reward_setting, -1);
+        assert_eq!(data.header.map_pattern, -1);
+
+        assert_eq!(data.entries.len(), 2);
+        assert_eq!(data.entries[0].cost, 30);
+        assert_eq!(data.entries[0].init_track, 48);
+        assert_eq!(data.entries[0].bgm_change_percent, 99);
+        assert_eq!(data.entries[0].boss_track, 33);
+        assert_eq!(
+            data.entries[0].rewards,
+            RewardStructure::Timed(vec![
+                TimedScore { score: 8500, item_id: 13, amount: 10 },
+                TimedScore { score: 5000, item_id: 3, amount: 1 },
+            ]),
+        );
+        assert_eq!(data.entries[1].init_track, 3);
+    }
+
+    #[test]
+    fn the_sentinel_row_closes_the_table() {
+        let raw = format!("{HEADERS}10,1000,1,0,-1\n-1,\n30,3000,1,0,-1\n");
+        let data = MapStageData::parse(raw, None).unwrap();
+
+        assert_eq!(data.entries.len(), 1);
+        assert_eq!(data.entries[0].cost, 10);
+    }
+
     #[test]
     fn a_file_with_no_data_rows_is_an_error() {
         assert_eq!(MapStageData::parse(HEADERS, None).unwrap_err(), MapStageDataError::EmptyFile);
+        assert_eq!(
+            MapStageData::parse(format!("{HEADERS}-1,\n"), None).unwrap_err(),
+            MapStageDataError::EmptyFile,
+        );
     }
 }

@@ -21,7 +21,9 @@
 //! - [`combat`] holds the shared statistic structure both factions parse into,
 //!   plus the registry that recognizes which abilities an entity carries.
 //! - [`chapter`] covers the level content: chapters, maps, and stages.
-//! - [`common`] holds the text handling, regional conventions, and lookup tables
+//! - [`files`] holds the game-wide tables no single domain owns: the tuning
+//!   constants, the string dictionary, and the item catalogue.
+//! - [`common`] holds the text handling, column tables, and regional conventions
 //!   the other modules share.
 //! - [`graphics`] parses animation rigs and resolves them into renderer-ready
 //!   geometry. Requires the `graphics` feature.
@@ -60,6 +62,7 @@ pub mod combat;
 pub mod enemy;
 pub mod chapter;
 pub mod common;
+pub mod files;
 
 pub use error::Error;
 

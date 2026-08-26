@@ -1,14 +1,16 @@
 //! AES decryption and encryption of asset pack chunks and manifests.
 
 mod ciphers;
+mod manifest;
 mod verify;
 
 use std::error::Error;
 use std::fmt;
 
-use crate::common::tools::variant::Region;
+use crate::common::Region;
 use ciphers::{decrypt_cbc, decrypt_ecb, encrypt_cbc, encrypt_ecb, get_md5_key};
 
+pub use manifest::PackEntry;
 pub use verify::check_integrity;
 
 /// Represents errors that can occur while decrypting or encrypting pack data.
@@ -229,7 +231,7 @@ pub fn encrypt_list(data: &str) -> Result<Vec<u8>, PackError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::tools::variant::Region;
+    use crate::common::Region;
 
     const KEY_HEX: &str = "0123456789abcdef0123456789abcdef";
     const IV_HEX: &str = "fedcba9876543210fedcba9876543210";

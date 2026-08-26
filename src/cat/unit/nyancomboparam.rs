@@ -8,7 +8,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file::{self, Separator};
+use crate::common::file::{self, Separator};
 
 use super::ComboStrength;
 

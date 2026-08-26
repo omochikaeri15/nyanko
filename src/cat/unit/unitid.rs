@@ -4,8 +4,8 @@
 //! assets, with one row per evolutionary form and no header.
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
-use crate::common::tools::columns;
-use crate::common::tools::file::Separator;
+use crate::common::columns;
+use crate::common::file::Separator;
 
 /// Parses a per-unit Cat statistic file into one entity per evolutionary form.
 ///

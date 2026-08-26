@@ -1,7 +1,7 @@
 use serde::Serialize;
 
-use crate::common::tools::columns::{self, Column};
-use crate::common::tools::file;
+use crate::common::columns::{self, Column};
+use crate::common::file;
 
 use super::RigError;
 

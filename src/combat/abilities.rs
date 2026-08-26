@@ -6,8 +6,8 @@
 //! module holds that knowledge as a static registry.
 
 use crate::cat::unit::TalentGroup;
-use crate::common::data::img015;
-use crate::common::tools::columns::Scale;
+use crate::files::img015;
+use crate::common::columns::Scale;
 
 use super::{Entity, Faction};
 

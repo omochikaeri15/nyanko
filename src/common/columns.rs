@@ -245,21 +245,21 @@ pub fn apply<T>(row: &[&str], table: &[Column<T>], target: &mut T) -> usize {
 /// value. A table whose columns share one fallback states it once as a leading
 /// `absent <literal>;`, which any entry may still override.
 macro_rules! columns {
-    (@scale) => { $crate::common::tools::columns::Scale::Raw };
-    (@scale $scale:ident) => { $crate::common::tools::columns::Scale::$scale };
+    (@scale) => { $crate::common::columns::Scale::Raw };
+    (@scale $scale:ident) => { $crate::common::columns::Scale::$scale };
     (@default $absent:literal,) => { stringify!($absent) };
     (@default $absent:literal, $default:literal) => { stringify!($default) };
     (@table $absent:literal; $($field:ident : $index:literal $(, $scale:ident $(, $default:literal)?)?);* $(;)?) => {
-        &[$($crate::common::tools::columns::Column::new(
+        &[$($crate::common::columns::Column::new(
             stringify!($field),
             $index,
-            $crate::common::tools::columns::columns!(@scale $($scale)?),
-            $crate::common::tools::columns::columns!(@default $absent, $($($default)?)?),
+            $crate::common::columns::columns!(@scale $($scale)?),
+            $crate::common::columns::columns!(@default $absent, $($($default)?)?),
             |target, cell| {
-                if let Some(value) = $crate::common::tools::columns::parse_cell(
+                if let Some(value) = $crate::common::columns::parse_cell(
                     cell,
-                    $crate::common::tools::columns::columns!(@default $absent, $($($default)?)?),
-                    $crate::common::tools::columns::columns!(@scale $($scale)?),
+                    $crate::common::columns::columns!(@default $absent, $($($default)?)?),
+                    $crate::common::columns::columns!(@scale $($scale)?),
                 ) {
                     target.$field = value;
                 }
@@ -267,10 +267,10 @@ macro_rules! columns {
         )),*]
     };
     (absent $absent:literal; $($body:tt)*) => {
-        $crate::common::tools::columns::columns!(@table $absent; $($body)*)
+        $crate::common::columns::columns!(@table $absent; $($body)*)
     };
     ($($body:tt)*) => {
-        $crate::common::tools::columns::columns!(@table 0; $($body)*)
+        $crate::common::columns::columns!(@table 0; $($body)*)
     };
 }
 

@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file::{self, Separator};
+use crate::common::file::{self, Separator};
 
 /// Represents errors that can occur during the parsing of EX map links.
 #[derive(Debug, Clone, PartialEq, Eq)]

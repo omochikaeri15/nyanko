@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::common::tools::columns;
-use crate::common::tools::file::{self, Separator};
-use crate::common::tools::columns::Column;
+use crate::common::columns;
+use crate::common::file::{self, Separator};
+use crate::common::columns::Column;
 
 /// Represents errors that can occur during the parsing of unit progression data.
 #[derive(Debug, Clone, PartialEq, Eq)]

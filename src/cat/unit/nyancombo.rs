@@ -10,7 +10,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::file::{self, Separator};
+use crate::common::file::{self, Separator};
 
 /// Represents errors that can occur while parsing a localized combo text table.
 #[derive(Debug, Clone, PartialEq, Eq)]

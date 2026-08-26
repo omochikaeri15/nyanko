@@ -4,8 +4,8 @@
 //! carrying two header lines, with one row per enemy in identifier order.
 
 use crate::combat::{Column, Entity, EntityError, Faction, entity};
-use crate::common::tools::columns;
-use crate::common::tools::file::Separator;
+use crate::common::columns;
+use crate::common::file::Separator;
 
 const HEADER_LINES: usize = 2;
 

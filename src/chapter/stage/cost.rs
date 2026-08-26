@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::chapter::Category;
-use crate::common::tools::columns::FromColumn;
+use crate::common::columns::FromColumn;
 
 const CURRENCY_SCALE: u32 = 1000;
 

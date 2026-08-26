@@ -9,8 +9,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::tools::columns::{self, Column};
-use crate::common::tools::file::{self, Separator};
+use crate::common::columns::{self, Column};
+use crate::common::file::{self, Separator};
 
 /// Represents errors that can occur while parsing the Cat combo table.
 #[derive(Debug, Clone, PartialEq, Eq)]

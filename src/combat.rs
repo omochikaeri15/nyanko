@@ -16,6 +16,6 @@ pub use abilities::{
     Ability, AttrUnit, AttrValue, Attribute, Identity, REGISTRY, Stored, TalentValue, get_ability,
     get_talent,
 };
-pub use crate::common::tools::columns::Scale;
-pub use crate::common::tools::file::Separator;
+pub use crate::common::Scale;
+pub use crate::common::Separator;
 pub use entity::{Column, Entity, EntityError, Faction};
