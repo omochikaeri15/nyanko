@@ -15,7 +15,7 @@ use super::animate::{resolve_frame, FrameData};
 use super::tools::{boundary, periodicity};
 
 pub use boundary::{BoundingBox, Tolerance};
-pub use imgcut::{SpriteCut, SpriteSheet};
+pub use imgcut::{Opaque, SpriteCut, SpriteSheet};
 pub use maanim::{AnimModification, Animation, Keyframe};
 pub use mamodel::{Alignment, Model, ModelPart};
 

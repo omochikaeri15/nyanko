@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use image::{self, RgbaImage};
@@ -11,6 +12,12 @@ use super::RigError;
 const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
 const MINIMUM_PNG_LENGTH: usize = 33;
+
+/// The alpha at or above which a pixel counts towards a cut's opaque extent.
+const ALPHA_FLOOR: u8 = 8;
+
+/// The most points a cut's visible hull may carry.
+const HULL_CAP: usize = 64;
 
 /// One sprite region within a texture atlas, in source pixels.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -41,6 +48,24 @@ impl SpriteCut {
     };
 }
 
+/// The tightest rectangle within a cut that contains a visible pixel.
+///
+/// The atlas pads its cuts with transparency that draws nothing, so a consumer
+/// measuring the area a part occupies wants this rather than the declared
+/// region. The coordinates are in the same atlas pixel space as
+/// [`SpriteCut`], so they can be compared with a cut's own edges directly.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Opaque {
+    /// The left edge of the visible region.
+    pub x: i32,
+    /// The top edge of the visible region.
+    pub y: i32,
+    /// The width of the visible region.
+    pub width: i32,
+    /// The height of the visible region.
+    pub height: i32,
+}
+
 /// A decoded texture atlas and the sprite regions carved out of it.
 #[derive(Clone, Debug, Default)]
 pub struct SpriteSheet {
@@ -52,6 +77,25 @@ pub struct SpriteSheet {
     pub image_name: String,
     /// The sprite regions carved out of the atlas, in the order the file declares them.
     pub cuts: Vec<SpriteCut>,
+    /// The visible extent measured within each cut, parallel to `cuts`, holding `None` where a cut draws nothing at all.
+    ///
+    /// This is measured from the atlas pixels rather than declared by the cut
+    /// list, so it is empty when the sheet carries no decoded image to measure.
+    pub opaque: Vec<Option<Opaque>>,
+    /// The convex hull of each cut's visible pixels, parallel to `cuts`, holding an empty hull where a cut draws nothing at all.
+    ///
+    /// [`Opaque`] is an axis-aligned rectangle, so its corners are transparent
+    /// whenever the sprite inside it is not itself rectangular. Those corners
+    /// cost nothing while the part is unrotated and inflate its measured extent
+    /// as soon as it turns, so a consumer measuring a rotated part wants this
+    /// instead. The points address pixel corners rather than pixel centres, so
+    /// the right edge of a cut's visible pixels reads as `x + width` in the same
+    /// atlas pixel space as [`SpriteCut`].
+    ///
+    /// A hull is held to sixty-four points by merging neighbouring columns
+    /// before it is built, so a cut whose outline is finer than that reports a
+    /// bound enclosing its visible pixels rather than their exact hull.
+    pub hull: Vec<Vec<(i32, i32)>>,
 }
 
 impl SpriteSheet {
@@ -133,7 +177,57 @@ impl SpriteSheet {
             return Err(RigError::NoSpriteCuts);
         }
 
-        Ok(Self { image_data: Some(Arc::new(image)), version, image_name, cuts })
+        let (opaque, hull) = cuts
+            .iter()
+            .map(|cut| measure(&image, cut).map_or((None, Vec::new()), |(rect, hull)| (Some(rect), hull)))
+            .unzip();
+
+        Ok(Self { image_data: Some(Arc::new(image)), version, image_name, cuts, opaque, hull })
+    }
+
+    /// Returns the visible extent of one cut, falling back to the cut's own region.
+    ///
+    /// A sheet parsed without pixel data has nothing to measure, so every cut
+    /// reports the region the cut list declares for it.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the cut in `cuts`.
+    ///
+    /// # Returns
+    /// An `Option` containing the visible region, or `None` for a cut that draws
+    /// nothing or an index no cut occupies.
+    pub fn visible(&self, index: usize) -> Option<Opaque> {
+        let cut = self.cuts.get(index)?;
+
+        match self.opaque.get(index) {
+            Some(measured) => *measured,
+            None => Some(Opaque { x: cut.x, y: cut.y, width: cut.width, height: cut.height }),
+        }
+    }
+
+    /// Returns the hull of one cut's visible pixels, falling back to the cut's own region.
+    ///
+    /// A sheet parsed without pixel data has nothing to measure, so every cut
+    /// reports the four corners of the region the cut list declares for it.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the cut in `cuts`.
+    ///
+    /// # Returns
+    /// An `Option` containing the hull points, or `None` for a cut that draws
+    /// nothing or an index no cut occupies.
+    pub fn outline(&self, index: usize) -> Option<Cow<'_, [(i32, i32)]>> {
+        let cut = self.cuts.get(index)?;
+
+        match self.hull.get(index) {
+            Some(hull) => (!hull.is_empty()).then_some(Cow::Borrowed(hull.as_slice())),
+            None => Some(Cow::Owned(vec![
+                (cut.x, cut.y),
+                (cut.x + cut.width, cut.y),
+                (cut.x, cut.y + cut.height),
+                (cut.x + cut.width, cut.y + cut.height),
+            ])),
+        }
     }
 
     /// Salvages a corrupted or truncated PNG stream into the largest decodable image.
@@ -276,12 +370,270 @@ impl SpriteSheet {
     }
 }
 
+/// Measures the visible extent of one cut and the hull enclosing its visible pixels.
+///
+/// The cut is clipped to the atlas first, so a region reaching past the edge is
+/// measured over the part of it that exists. Only the topmost and bottommost
+/// visible pixel of a column can touch the hull, so it is built from two
+/// candidates per column rather than from every pixel.
+///
+/// The hull is held to [`HULL_CAP`] points, which encloses more than the pixels
+/// themselves but never more than the rectangle already does.
+fn measure(image: &RgbaImage, cut: &SpriteCut) -> Option<(Opaque, Vec<(i32, i32)>)> {
+    let (atlas_width, atlas_height) = (image.width() as i64, image.height() as i64);
+
+    let left = (cut.x as i64).clamp(0, atlas_width);
+    let top = (cut.y as i64).clamp(0, atlas_height);
+    let right = (cut.x as i64 + cut.width as i64).clamp(left, atlas_width);
+    let bottom = (cut.y as i64 + cut.height as i64).clamp(top, atlas_height);
+
+    let mut spans: Vec<Option<(i64, i64)>> = vec![None; (right - left) as usize];
+
+    for y in top..bottom {
+        for x in left..right {
+            if image.get_pixel(x as u32, y as u32)[3] < ALPHA_FLOOR { continue; }
+
+            let Some(span) = spans.get_mut((x - left) as usize) else { continue };
+
+            *span = Some(span.map_or((y, y), |(first, _)| (first, y)));
+        }
+    }
+
+    let (mut min_x, mut min_y) = (i64::MAX, i64::MAX);
+    let (mut max_x, mut max_y) = (i64::MIN, i64::MIN);
+
+    for (column, span) in spans.iter().enumerate() {
+        let Some(&(first, last)) = span.as_ref() else { continue };
+
+        min_x = min_x.min(left + column as i64);
+        max_x = max_x.max(left + column as i64 + 1);
+        min_y = min_y.min(first);
+        max_y = max_y.max(last + 1);
+    }
+
+    if min_x >= max_x { return None; }
+
+    let opaque = Opaque {
+        x: min_x as i32,
+        y: min_y as i32,
+        width: (max_x - min_x) as i32,
+        height: (max_y - min_y) as i32,
+    };
+
+    Some((opaque, bound(&spans, left, HULL_CAP)))
+}
+
+/// Wraps a span table in a hull of no more than `cap` points.
+///
+/// Columns are merged into ever wider groups and the hull rebuilt until it fits,
+/// each group contributing the four corners of the rectangle enclosing its own
+/// columns. A hull that already fits is the exact hull of the pixels.
+fn bound(spans: &[Option<(i64, i64)>], left: i64, cap: usize) -> Vec<(i32, i32)> {
+    let mut step = 1;
+
+    let hull = loop {
+        let hull = wrap(corners(spans, left, step));
+
+        if hull.len() <= cap || step >= spans.len() { break hull; }
+
+        step *= 2;
+    };
+
+    hull.into_iter().map(|(x, y)| (x as i32, y as i32)).collect()
+}
+
+/// Collects the hull candidates of one span table, merging every `step` columns into a group.
+///
+/// A group contributes the four corners of the rectangle enclosing its columns,
+/// which contains every visible pixel those columns hold. A step of one leaves
+/// each column its own group and yields the candidates of the exact hull.
+fn corners(spans: &[Option<(i64, i64)>], left: i64, step: usize) -> Vec<(i64, i64)> {
+    let mut points = Vec::with_capacity(spans.len().div_ceil(step.max(1)) * 4);
+
+    for (group, columns) in spans.chunks(step.max(1)).enumerate() {
+        let (mut near_x, mut near_y) = (i64::MAX, i64::MAX);
+        let (mut far_x, mut far_y) = (i64::MIN, i64::MIN);
+
+        for (offset, span) in columns.iter().enumerate() {
+            let Some(&(first, last)) = span.as_ref() else { continue };
+
+            let column = left + (group * step.max(1) + offset) as i64;
+
+            near_x = near_x.min(column);
+            near_y = near_y.min(first);
+            far_x = far_x.max(column + 1);
+            far_y = far_y.max(last + 1);
+        }
+
+        if near_x >= far_x { continue; }
+
+        points.extend([(near_x, near_y), (far_x, near_y), (near_x, far_y), (far_x, far_y)]);
+    }
+
+    points
+}
+
+/// Wraps a set of points in the smallest convex polygon containing all of them.
+///
+/// The polygon comes back in counter-clockwise order with collinear points
+/// dropped, so a rectangular set of candidates reduces to four points.
+fn wrap(mut points: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    points.sort_unstable();
+    points.dedup();
+
+    if points.len() < 3 { return points; }
+
+    let cross = |origin: (i64, i64), first: (i64, i64), second: (i64, i64)| {
+        (first.0 - origin.0) * (second.1 - origin.1) - (first.1 - origin.1) * (second.0 - origin.0)
+    };
+
+    let turns_inward = |chain: &[(i64, i64)], point: (i64, i64)| {
+        match (chain.len().checked_sub(2).and_then(|at| chain.get(at)), chain.last()) {
+            (Some(&behind), Some(&last)) => cross(behind, last, point) <= 0,
+            _ => false,
+        }
+    };
+
+    let chain = |ordered: &mut dyn Iterator<Item = (i64, i64)>| {
+        let mut half: Vec<(i64, i64)> = Vec::with_capacity(points.len());
+
+        for point in ordered {
+            while turns_inward(&half, point) { half.pop(); }
+
+            half.push(point);
+        }
+
+        half.pop();
+        half
+    };
+
+    let mut hull = chain(&mut points.iter().copied());
+    hull.extend(chain(&mut points.iter().rev().copied()));
+
+    hull
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn atlas(rows: &[&str]) -> RgbaImage {
+        let height = rows.len() as u32;
+        let width = rows.first().map_or(0, |row| row.len()) as u32;
+
+        RgbaImage::from_fn(width, height, |x, y| {
+            let solid = rows[y as usize].as_bytes()[x as usize] == b'#';
+
+            image::Rgba(if solid { [255, 255, 255, 255] } else { [0, 0, 0, 0] })
+        })
+    }
+
+    fn whole(image: &RgbaImage) -> SpriteCut {
+        SpriteCut { x: 0, y: 0, width: image.width() as i32, height: image.height() as i32, name: String::new() }
+    }
+
+    fn cross(origin: (i32, i32), first: (i32, i32), second: (i32, i32)) -> i64 {
+        let (first, second) = (
+            ((first.0 - origin.0) as i64, (first.1 - origin.1) as i64),
+            ((second.0 - origin.0) as i64, (second.1 - origin.1) as i64),
+        );
+
+        first.0 * second.1 - first.1 * second.0
+    }
+
+    fn encloses(hull: &[(i32, i32)], point: (i32, i32)) -> bool {
+        hull.iter().enumerate().all(|(at, &corner)| {
+            let next = hull[(at + 1) % hull.len()];
+
+            cross(corner, next, point) >= 0
+        })
+    }
+
     #[test]
     fn cut_columns_map_one_field_each() {
         columns::assert_one_field_per_column(SpriteCut::COLUMNS);
+    }
+
+    #[test]
+    fn a_solid_rectangle_hulls_to_its_four_corners() {
+        let image = atlas(&["####", "####", "####"]);
+        let (rect, hull) = measure(&image, &whole(&image)).expect("a solid atlas measures");
+
+        assert_eq!(rect, Opaque { x: 0, y: 0, width: 4, height: 3 });
+        assert_eq!(hull, vec![(0, 0), (4, 0), (4, 3), (0, 3)]);
+    }
+
+    #[test]
+    fn a_diagonal_hulls_inside_the_rectangle_it_fills() {
+        let image = atlas(&["#...", ".#..", "..#.", "...#"]);
+        let (rect, hull) = measure(&image, &whole(&image)).expect("a diagonal atlas measures");
+
+        assert_eq!(rect, Opaque { x: 0, y: 0, width: 4, height: 4 });
+        assert!(hull.len() < 8);
+        assert!(!encloses(&hull, (4, 0)));
+        assert!(!encloses(&hull, (0, 4)));
+    }
+
+    #[test]
+    fn a_transparent_cut_measures_nothing() {
+        let image = atlas(&["....", "....", "...."]);
+
+        assert!(measure(&image, &whole(&image)).is_none());
+    }
+
+    #[test]
+    fn a_diamond_hulls_to_its_eight_sides() {
+        let image = atlas(&["..##..", ".####.", "######", ".####.", "..##.."]);
+        let (_, mut hull) = measure(&image, &whole(&image)).expect("a diamond measures");
+
+        hull.sort_unstable();
+
+        assert_eq!(hull, vec![(0, 2), (0, 3), (2, 0), (2, 5), (4, 0), (4, 5), (6, 2), (6, 3)]);
+    }
+
+    #[test]
+    fn a_hull_past_the_cap_still_encloses_every_pixel() {
+        let table: Vec<Option<(i64, i64)>> = (0..32).map(|column| Some((column * column / 4, 250))).collect();
+
+        let exact = bound(&table, 0, 64);
+        let capped = bound(&table, 0, 6);
+
+        assert!(exact.len() > 6);
+        assert!(capped.len() <= 6);
+
+        for (column, span) in table.iter().enumerate() {
+            let Some(&(first, last)) = span.as_ref() else { continue };
+            let (near, far) = (column as i32, column as i32 + 1);
+
+            for corner in [(near, first as i32), (far, first as i32), (near, last as i32 + 1), (far, last as i32 + 1)] {
+                assert!(encloses(&capped, corner), "{corner:?} escaped the capped hull");
+            }
+        }
+    }
+
+    #[test]
+    fn a_sheet_without_pixels_outlines_the_region_it_declares() {
+        let sheet = SpriteSheet {
+            cuts: vec![SpriteCut { x: 3, y: 5, width: 10, height: 20, name: String::new() }],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            sheet.outline(0).as_deref(),
+            Some([(3, 5), (13, 5), (3, 25), (13, 25)].as_slice()),
+        );
+        assert_eq!(sheet.outline(1), None);
+    }
+
+    #[test]
+    fn a_cut_drawing_nothing_has_no_outline() {
+        let sheet = SpriteSheet {
+            cuts: vec![SpriteCut { x: 0, y: 0, width: 4, height: 4, name: String::new() }],
+            opaque: vec![None],
+            hull: vec![Vec::new()],
+            ..Default::default()
+        };
+
+        assert_eq!(sheet.outline(0), None);
     }
 }

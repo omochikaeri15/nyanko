@@ -225,11 +225,66 @@ impl Animation {
     pub fn declared_frames(&self) -> i32 {
         match self.length() {
             length if length > 0 => length,
-            _ => self.modifications.iter()
-                .filter_map(|modification| modification.keyframes.last())
-                .fold(0, |furthest, keyframe| furthest.max(keyframe.frame))
-                .max(1),
+            _ => self.last_frame().max(1),
         }
+    }
+
+    /// Returns the furthest frame any modification reaches.
+    ///
+    /// This is a frame index rather than a count, and is the last frame the file
+    /// itself defines a control point for. It differs from
+    /// [`Animation::declared_frames`] less one whenever a modification replays a
+    /// fixed number of times, since the length the engine measures multiplies
+    /// that modification's span by its replay count.
+    ///
+    /// # Returns
+    /// An `i32` containing the index, or zero for a timeline with no keyframes.
+    pub fn last_frame(&self) -> i32 {
+        self.modifications.iter()
+            .filter_map(|modification| modification.keyframes.last())
+            .fold(0, |furthest, keyframe| furthest.max(keyframe.frame))
+    }
+
+    /// Returns the number of frames one full playback cycle occupies.
+    ///
+    /// Every replaying modification wraps over the span between its first and
+    /// last keyframe, so a timeline realigns over the least common multiple of
+    /// those spans. This is that interval, expressed as a frame count, rejected
+    /// only where the file itself rules it out: a timeline holding a
+    /// modification that plays exactly once never returns to its start, and an
+    /// interval shorter than the content the file declares would truncate it. A
+    /// timeline with no replaying span is a held pose and occupies the frames it
+    /// declares.
+    ///
+    /// The interval is the exact least common multiple and is not bounded here,
+    /// so a timeline whose spans share no factors can resolve to a cycle far
+    /// longer than the content it was authored from.
+    ///
+    /// # Returns
+    /// An `Option` containing the cycle length in frames, which is at least one,
+    /// or `None` when the timeline does not return to its start.
+    pub fn loop_frames(&self) -> Option<i32> {
+        let last = self.last_frame();
+        let mut cycle: i32 = 1;
+        let mut repeating = false;
+
+        for modification in &self.modifications {
+            if modification.loop_count == 1 { return None; }
+
+            let (Some(first), Some(final_key)) = (modification.keyframes.first(), modification.keyframes.last()) else {
+                continue;
+            };
+
+            let span = final_key.frame - first.frame;
+            if span <= 0 { continue; }
+
+            cycle = (cycle / math::gcd(cycle, span)).checked_mul(span)?;
+            repeating = true;
+        }
+
+        if !repeating { return Some(last + 1); }
+
+        (cycle >= last).then_some(cycle)
     }
 
     /// Returns the number of frames to play before returning to the start.
@@ -237,17 +292,16 @@ impl Animation {
     /// The engine never loops an animation itself: a modification that replays
     /// wraps its own keyframe range, and [`Animation::length`] reports minus one
     /// for a timeline that never ends. Anything that plays a timeline back still
-    /// needs somewhere to restart, so this prefers the interval over which every
-    /// modification realigns and falls back to
-    /// [`Animation::declared_frames`]. That interval is the least common
-    /// multiple of the replaying spans and grows far past the authored content,
-    /// so anything sizing a control, a default range or a bounded sweep wants
-    /// [`Animation::declared_frames`] instead.
+    /// needs somewhere to restart, so this takes the playback cycle where the
+    /// timeline has one and falls back to [`Animation::declared_frames`]. That
+    /// cycle is the least common multiple of the replaying spans and is not
+    /// bounded, so anything sizing a control, a default range or a bounded sweep
+    /// wants [`Animation::declared_frames`] instead.
     ///
     /// # Returns
     /// An `i32` containing the frame count, which is at least one.
     pub fn playback_frames(&self) -> i32 {
-        self.period().map_or_else(|| self.declared_frames(), |period| period.max(1))
+        self.loop_frames().unwrap_or_else(|| self.declared_frames())
     }
 
     /// Measures an animation's length without building the full timeline.
@@ -396,6 +450,61 @@ mod tests {
         };
 
         assert_eq!(animation.declared_frames(), 153);
+    }
+
+    #[test]
+    fn loop_frames_counts_the_realignment_interval_without_padding() {
+        let animation = Animation {
+            version: 1,
+            modifications: vec![modification(-1, &[0, 8]), modification(-1, &[0, 12])],
+        };
+
+        assert_eq!(animation.loop_frames(), Some(24));
+    }
+
+    #[test]
+    fn loop_frames_refuses_an_interval_that_truncates_the_content() {
+        let animation = Animation {
+            version: 1,
+            modifications: vec![modification(-1, &[0, 50]), modification(-1, &[84, 84])],
+        };
+
+        assert_eq!(animation.loop_frames(), None);
+        assert_eq!(animation.playback_frames(), animation.declared_frames());
+        assert_eq!(animation.declared_frames(), 84);
+    }
+
+    #[test]
+    fn loop_frames_reports_an_interval_no_player_would_use() {
+        let animation = Animation {
+            version: 1,
+            modifications: vec![modification(-1, &[0, 9_973]), modification(-1, &[0, 9_967])],
+        };
+
+        assert_eq!(animation.loop_frames(), Some(99_400_891));
+    }
+
+    #[test]
+    fn a_play_once_modification_has_no_cycle() {
+        let animation = Animation { version: 1, modifications: vec![modification(1, &[0, 129])] };
+
+        assert_eq!(animation.loop_frames(), None);
+        assert_eq!(animation.playback_frames(), 130);
+    }
+
+    #[test]
+    fn a_held_pose_occupies_the_frames_it_declares() {
+        let animation = Animation { version: 1, modifications: vec![modification(-1, &[7, 7])] };
+
+        assert_eq!(animation.loop_frames(), Some(8));
+    }
+
+    #[test]
+    fn last_frame_is_not_the_declared_count_less_one() {
+        let animation = Animation { version: 1, modifications: vec![modification(3, &[2, 12])] };
+
+        assert_eq!(animation.last_frame(), 12);
+        assert_eq!(animation.declared_frames(), 33);
     }
 
     #[test]
