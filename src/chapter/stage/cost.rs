@@ -200,7 +200,7 @@ mod tests {
     fn the_catamin_chapter_overrides_what_the_header_declares() {
         assert_eq!(CostType::of(&Category::CataminStages, CostType::Energy), CostType::Catamin);
         assert_eq!(CostType::of(&Category::CataminStages, CostType::Item), CostType::Catamin);
-        assert_eq!(CostType::of(&Category::RegularEventStages, CostType::Item), CostType::Item);
+        assert_eq!(CostType::of(&Category::EventStages, CostType::Item), CostType::Item);
         assert_eq!(CostType::of(&Category::EmpireOfCats, CostType::Energy), CostType::Energy);
     }
 

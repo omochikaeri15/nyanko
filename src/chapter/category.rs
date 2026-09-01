@@ -11,7 +11,7 @@ pub enum Category {
     /// The Stories of Legend chapter.
     StoriesOfLegend,
     /// The recurring event stage chapter.
-    RegularEventStages,
+    EventStages,
     /// The collaboration event chapter.
     CollabStages,
     /// The Empire of Cats main story chapter.
@@ -21,7 +21,7 @@ pub enum Category {
     /// The Cats of the Cosmos main story chapter.
     CatsOfTheCosmos,
     /// The limited-time event chapter.
-    EventStages,
+    ExtraStages,
     /// The Catclaw Dojo Hall of Initiates chapter.
     DojoHallOfInitiates,
     /// The Towers and Citadels chapter.
@@ -75,12 +75,12 @@ impl Category {
     pub fn map_prefix(&self) -> String {
         match self {
             Self::StoriesOfLegend      => "N".to_string(),
-            Self::RegularEventStages   => "S".to_string(),
+            Self::EventStages          => "S".to_string(),
             Self::CollabStages         => "C".to_string(),
             Self::EmpireOfCats         => "EC".to_string(),
             Self::IntoTheFuture        => "W".to_string(),
             Self::CatsOfTheCosmos      => "Space".to_string(),
-            Self::EventStages          => "E".to_string(),
+            Self::ExtraStages          => "E".to_string(),
             Self::DojoHallOfInitiates  => "T".to_string(),
             Self::TowersAndCitadels    => "V".to_string(),
             Self::DojoRankingEvents    => "R".to_string(),
@@ -126,10 +126,10 @@ impl Category {
 
         match self {
             Self::StoriesOfLegend      => prefixes.push("RN".to_string()),
-            Self::RegularEventStages   => prefixes.push("RS".to_string()),
+            Self::EventStages          => prefixes.push("RS".to_string()),
             Self::CollabStages         => prefixes.push("RC".to_string()),
             Self::EmpireOfCats         => prefixes.push("".to_string()),
-            Self::EventStages          => prefixes.extend(["RE".to_string(), "EX".to_string()]),
+            Self::ExtraStages          => prefixes.extend(["RE".to_string(), "EX".to_string()]),
             Self::DojoHallOfInitiates  => prefixes.push("RT".to_string()),
             Self::TowersAndCitadels    => prefixes.push("RV".to_string()),
             Self::DojoRankingEvents    => prefixes.push("RR".to_string()),
@@ -170,12 +170,12 @@ impl Category {
     pub fn from_prefix(prefix: &str) -> Self {
         match prefix.to_uppercase().as_str() {
             "N"     | "RN"    => Self::StoriesOfLegend,
-            "S"     | "RS"    => Self::RegularEventStages,
+            "S"     | "RS"    => Self::EventStages,
             "C"     | "RC"    => Self::CollabStages,
             "EC"    | ""      => Self::EmpireOfCats,
             "W"               => Self::IntoTheFuture,
             "SPACE"           => Self::CatsOfTheCosmos,
-            "E" | "RE" | "EX" => Self::EventStages,
+            "E" | "RE" | "EX" => Self::ExtraStages,
             "T"     | "RT"    => Self::DojoHallOfInitiates,
             "V"     | "RV"    => Self::TowersAndCitadels,
             "R"     | "RR"    => Self::DojoRankingEvents,
@@ -206,12 +206,12 @@ impl Category {
     pub fn base_id(&self) -> Option<u32> {
         match self {
             Self::StoriesOfLegend      => Some(0),
-            Self::RegularEventStages   => Some(1),
+            Self::EventStages          => Some(1),
             Self::CollabStages         => Some(2),
             Self::EmpireOfCats         => None,
             Self::IntoTheFuture        => None,
             Self::CatsOfTheCosmos      => None,
-            Self::EventStages          => Some(4),
+            Self::ExtraStages          => Some(4),
             Self::DojoHallOfInitiates  => Some(6),
             Self::TowersAndCitadels    => Some(7),
             Self::DojoRankingEvents    => Some(11),
@@ -254,19 +254,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn event_stages_stage_prefix_includes_ex() {
-        assert!(Category::EventStages.stage_prefix().contains(&"EX".to_string()));
+    fn extra_stages_stage_prefix_includes_ex() {
+        assert!(Category::ExtraStages.stage_prefix().contains(&"EX".to_string()));
     }
 
     #[test]
-    fn event_stages_from_prefix_accepts_e_re_and_ex() {
-        assert_eq!(Category::from_prefix("E"), Category::EventStages);
-        assert_eq!(Category::from_prefix("RE"), Category::EventStages);
-        assert_eq!(Category::from_prefix("EX"), Category::EventStages);
+    fn extra_stages_from_prefix_accepts_e_re_and_ex() {
+        assert_eq!(Category::from_prefix("E"), Category::ExtraStages);
+        assert_eq!(Category::from_prefix("RE"), Category::ExtraStages);
+        assert_eq!(Category::from_prefix("EX"), Category::ExtraStages);
     }
 
     #[test]
-    fn event_stages_global_map_id_matches_map_option_scheme() {
-        assert_eq!(Category::EventStages.global_map_id(81), Some(4081));
+    fn extra_stages_global_map_id_matches_map_option_scheme() {
+        assert_eq!(Category::ExtraStages.global_map_id(81), Some(4081));
     }
 }
