@@ -174,7 +174,7 @@ struct World {
 /// One model part being posed, holding the block the engine keeps per part.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Part<'a> {
-    rest: &'a ModelPart,
+    pub(super) rest: &'a ModelPart,
     pose: Pose,
     world: World,
 }

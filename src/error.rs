@@ -105,6 +105,9 @@ pub enum Error {
     /// A unit's rig or animation data could not be parsed.
     #[cfg(feature = "graphics")]
     Rig(crate::graphics::rig::RigError),
+    /// Resolved geometry could not be mapped back to the parts that drew it.
+    #[cfg(feature = "graphics")]
+    Part(crate::graphics::part::PartError),
     /// An asset pack chunk or manifest could not be processed.
     #[cfg(feature = "pack")]
     Pack(crate::pack::cryptology::PackError),
@@ -155,6 +158,8 @@ impl Error {
             Self::GatyaItemName(source) => source,
             #[cfg(feature = "graphics")]
             Self::Rig(source) => source,
+            #[cfg(feature = "graphics")]
+            Self::Part(source) => source,
             #[cfg(feature = "pack")]
             Self::Pack(source) => source,
             #[cfg(feature = "bcu")]
@@ -401,6 +406,13 @@ impl From<GatyaItemNameError> for Error {
 impl From<crate::graphics::rig::RigError> for Error {
     fn from(source: crate::graphics::rig::RigError) -> Self {
         Self::Rig(source)
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl From<crate::graphics::part::PartError> for Error {
+    fn from(source: crate::graphics::part::PartError) -> Self {
+        Self::Part(source)
     }
 }
 
