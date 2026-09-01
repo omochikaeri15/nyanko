@@ -169,31 +169,31 @@ impl Category {
     /// prefix when it matches no known chapter.
     pub fn from_prefix(prefix: &str) -> Self {
         match prefix.to_uppercase().as_str() {
-            "N"     | "RN"    => Self::StoriesOfLegend,
-            "S"     | "RS"    => Self::EventStages,
-            "C"     | "RC"    => Self::CollabStages,
-            "EC"    | ""      => Self::EmpireOfCats,
-            "W"               => Self::IntoTheFuture,
-            "SPACE"           => Self::CatsOfTheCosmos,
-            "E" | "RE" | "EX" => Self::ExtraStages,
-            "T"     | "RT"    => Self::DojoHallOfInitiates,
-            "V"     | "RV"    => Self::TowersAndCitadels,
-            "R"     | "RR"    => Self::DojoRankingEvents,
-            "M"     | "RM"    => Self::ChallengeBattle,
-            "NA"    | "RNA"   => Self::UncannyLegends,
-            "B"     | "RB"    => Self::CataminStages,
-            "D"               => Self::LegendQuest,
-            "Z"               => Self::ZombieOutbreaks,
-            "A"     | "RA"    => Self::GauntletStages,
-            "H"     | "RH"    => Self::EnigmaStages,
-            "CA"    | "RCA"   => Self::CollabGauntletStages,
-            "DM"              => Self::AkuRealms,
-            "Q"     | "RQ"    => Self::BehemothCulling,
-            "L"               => Self::Labyrinth,
-            "ND"    | "RND"   => Self::ZeroLegends,
-            "SR"    | "RSR"   => Self::OtherworldColosseum,
-            "G"               => Self::CatclawChampionships,
-            _                 => Self::Unknown(prefix.to_string()),
+            "N"     | "RN"  => Self::StoriesOfLegend,
+            "S"     | "RS"  => Self::EventStages,
+            "C"     | "RC"  => Self::CollabStages,
+            "EC"    | ""    => Self::EmpireOfCats,
+            "W"             => Self::IntoTheFuture,
+            "SPACE"         => Self::CatsOfTheCosmos,
+            "RE"    | "EX"  => Self::ExtraStages,
+            "T"     | "RT"  => Self::DojoHallOfInitiates,
+            "V"     | "RV"  => Self::TowersAndCitadels,
+            "R"     | "RR"  => Self::DojoRankingEvents,
+            "M"     | "RM"  => Self::ChallengeBattle,
+            "NA"    | "RNA" => Self::UncannyLegends,
+            "B"     | "RB"  => Self::CataminStages,
+            "D"             => Self::LegendQuest,
+            "Z"             => Self::ZombieOutbreaks,
+            "A"     | "RA"  => Self::GauntletStages,
+            "H"     | "RH"  => Self::EnigmaStages,
+            "CA"    | "RCA" => Self::CollabGauntletStages,
+            "DM"            => Self::AkuRealms,
+            "Q"     | "RQ"  => Self::BehemothCulling,
+            "L"             => Self::Labyrinth,
+            "ND"    | "RND" => Self::ZeroLegends,
+            "SR"    | "RSR" => Self::OtherworldColosseum,
+            "G"             => Self::CatclawChampionships,
+            _               => Self::Unknown(prefix.to_string()),
         }
     }
 
@@ -259,8 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn extra_stages_from_prefix_accepts_e_re_and_ex() {
-        assert_eq!(Category::from_prefix("E"), Category::ExtraStages);
+    fn extra_stages_from_prefix_accepts_re_and_ex() {
         assert_eq!(Category::from_prefix("RE"), Category::ExtraStages);
         assert_eq!(Category::from_prefix("EX"), Category::ExtraStages);
     }
