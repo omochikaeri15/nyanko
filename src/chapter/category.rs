@@ -22,8 +22,6 @@ pub enum Category {
     CatsOfTheCosmos,
     /// The limited-time event chapter.
     EventStages,
-    /// The continuation stages that extend the main story chapters.
-    ContinuationStages,
     /// The Catclaw Dojo Hall of Initiates chapter.
     DojoHallOfInitiates,
     /// The Towers and Citadels chapter.
@@ -83,7 +81,6 @@ impl Category {
             Self::IntoTheFuture        => "W".to_string(),
             Self::CatsOfTheCosmos      => "Space".to_string(),
             Self::EventStages          => "E".to_string(),
-            Self::ContinuationStages   => "EX".to_string(),
             Self::DojoHallOfInitiates  => "T".to_string(),
             Self::TowersAndCitadels    => "V".to_string(),
             Self::DojoRankingEvents    => "R".to_string(),
@@ -132,7 +129,7 @@ impl Category {
             Self::RegularEventStages   => prefixes.push("RS".to_string()),
             Self::CollabStages         => prefixes.push("RC".to_string()),
             Self::EmpireOfCats         => prefixes.push("".to_string()),
-            Self::EventStages          => prefixes.push("RE".to_string()),
+            Self::EventStages          => prefixes.extend(["RE".to_string(), "EX".to_string()]),
             Self::DojoHallOfInitiates  => prefixes.push("RT".to_string()),
             Self::TowersAndCitadels    => prefixes.push("RV".to_string()),
             Self::DojoRankingEvents    => prefixes.push("RR".to_string()),
@@ -172,32 +169,31 @@ impl Category {
     /// prefix when it matches no known chapter.
     pub fn from_prefix(prefix: &str) -> Self {
         match prefix.to_uppercase().as_str() {
-            "N"     | "RN"  => Self::StoriesOfLegend,
-            "S"     | "RS"  => Self::RegularEventStages,
-            "C"     | "RC"  => Self::CollabStages,
-            "EC"    | ""    => Self::EmpireOfCats,
-            "W"             => Self::IntoTheFuture,
-            "SPACE"         => Self::CatsOfTheCosmos,
-            "E"     | "RE"  => Self::EventStages,
-            "EX"            => Self::ContinuationStages,
-            "T"     | "RT"  => Self::DojoHallOfInitiates,
-            "V"     | "RV"  => Self::TowersAndCitadels,
-            "R"     | "RR"  => Self::DojoRankingEvents,
-            "M"     | "RM"  => Self::ChallengeBattle,
-            "NA"    | "RNA" => Self::UncannyLegends,
-            "B"     | "RB"  => Self::CataminStages,
-            "D"             => Self::LegendQuest,
-            "Z"             => Self::ZombieOutbreaks,
-            "A"     | "RA"  => Self::GauntletStages,
-            "H"     | "RH"  => Self::EnigmaStages,
-            "CA"    | "RCA" => Self::CollabGauntletStages,
-            "DM"            => Self::AkuRealms,
-            "Q"     | "RQ"  => Self::BehemothCulling,
-            "L"             => Self::Labyrinth,
-            "ND"    | "RND" => Self::ZeroLegends,
-            "SR"    | "RSR" => Self::OtherworldColosseum,
-            "G"             => Self::CatclawChampionships,
-            _               => Self::Unknown(prefix.to_string()),
+            "N"     | "RN"    => Self::StoriesOfLegend,
+            "S"     | "RS"    => Self::RegularEventStages,
+            "C"     | "RC"    => Self::CollabStages,
+            "EC"    | ""      => Self::EmpireOfCats,
+            "W"               => Self::IntoTheFuture,
+            "SPACE"           => Self::CatsOfTheCosmos,
+            "E" | "RE" | "EX" => Self::EventStages,
+            "T"     | "RT"    => Self::DojoHallOfInitiates,
+            "V"     | "RV"    => Self::TowersAndCitadels,
+            "R"     | "RR"    => Self::DojoRankingEvents,
+            "M"     | "RM"    => Self::ChallengeBattle,
+            "NA"    | "RNA"   => Self::UncannyLegends,
+            "B"     | "RB"    => Self::CataminStages,
+            "D"               => Self::LegendQuest,
+            "Z"               => Self::ZombieOutbreaks,
+            "A"     | "RA"    => Self::GauntletStages,
+            "H"     | "RH"    => Self::EnigmaStages,
+            "CA"    | "RCA"   => Self::CollabGauntletStages,
+            "DM"              => Self::AkuRealms,
+            "Q"     | "RQ"    => Self::BehemothCulling,
+            "L"               => Self::Labyrinth,
+            "ND"    | "RND"   => Self::ZeroLegends,
+            "SR"    | "RSR"   => Self::OtherworldColosseum,
+            "G"               => Self::CatclawChampionships,
+            _                 => Self::Unknown(prefix.to_string()),
         }
     }
 
@@ -216,7 +212,6 @@ impl Category {
             Self::IntoTheFuture        => None,
             Self::CatsOfTheCosmos      => None,
             Self::EventStages          => Some(4),
-            Self::ContinuationStages   => Some(4),
             Self::DojoHallOfInitiates  => Some(6),
             Self::TowersAndCitadels    => Some(7),
             Self::DojoRankingEvents    => Some(11),
@@ -251,5 +246,27 @@ impl Category {
     /// is not addressed through this scheme.
     pub fn global_map_id(&self, local_map_id: u32) -> Option<u32> {
         self.base_id().map(|base| (base * 1000) + local_map_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_stages_stage_prefix_includes_ex() {
+        assert!(Category::EventStages.stage_prefix().contains(&"EX".to_string()));
+    }
+
+    #[test]
+    fn event_stages_from_prefix_accepts_e_re_and_ex() {
+        assert_eq!(Category::from_prefix("E"), Category::EventStages);
+        assert_eq!(Category::from_prefix("RE"), Category::EventStages);
+        assert_eq!(Category::from_prefix("EX"), Category::EventStages);
+    }
+
+    #[test]
+    fn event_stages_global_map_id_matches_map_option_scheme() {
+        assert_eq!(Category::EventStages.global_map_id(81), Some(4081));
     }
 }
