@@ -24,7 +24,9 @@ impl std::error::Error for UnitExplanationError {}
 ///
 /// Both arrays are indexed by form (0 = Normal, 1 = Evolved, 2 = True,
 /// 3 = Ultra). A form identical to the one before it is deduplicated to `None`,
-/// as is a form that does not exist.
+/// as is a form that does not exist. A row that omits its name cell, which the
+/// non-Japanese releases use for a form they have not localized, is cleared to
+/// `None` as well.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnitExplanation {
     /// An array of parsed display names, indexed by form. `None` if the form does not exist or was deduplicated.
@@ -88,6 +90,16 @@ fn parse_inner(bytes: &[u8], separator: Option<Separator>) -> Result<UnitExplana
     }
 
     for form_index in 1..4 {
+        let is_shifted = names[form_index].is_some()
+            && descriptions[form_index - 1].as_ref().and_then(|prior| prior.first()) == names[form_index].as_ref();
+
+        if is_shifted {
+            names[form_index] = None;
+            descriptions[form_index] = None;
+        }
+    }
+
+    for form_index in 1..4 {
         if names[form_index].is_some()
             && names[form_index] == names[form_index - 1]
             && descriptions[form_index] == descriptions[form_index - 1]
@@ -109,4 +121,51 @@ fn is_problematic_char(character: char) -> bool {
 
 fn looks_like_garbage_id(text: &str) -> bool {
     text.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_row_missing_its_name_cell_drops_out() {
+        let Ok(explanation) = UnitExplanation::parse("A|d1|d2|d3||\nB|e1|e2|e3||\ne1|e2|e3||", None) else {
+            panic!("the explanation file parsed to no text");
+        };
+
+        assert_eq!(explanation.names[1].as_deref(), Some("B"));
+        assert_eq!(explanation.names[2], None);
+        assert_eq!(explanation.descriptions[2], None);
+    }
+
+    #[test]
+    fn a_short_but_named_row_survives() {
+        let Ok(explanation) = UnitExplanation::parse("Sardine|d1|d2|d3|\nSardine Cat|e1|e2|e3|", None) else {
+            panic!("the explanation file parsed to no text");
+        };
+
+        assert_eq!(explanation.names[0].as_deref(), Some("Sardine"));
+        assert_eq!(explanation.names[1].as_deref(), Some("Sardine Cat"));
+        assert_eq!(explanation.descriptions[1], Some(vec!["e1".to_string(), "e2".to_string(), "e3".to_string()]));
+    }
+
+    #[test]
+    fn a_verbatim_repeat_of_the_prior_form_is_deduplicated() {
+        let Ok(explanation) = UnitExplanation::parse("A|d1|d2|d3||\nA|d1|d2|d3||", None) else {
+            panic!("the explanation file parsed to no text");
+        };
+
+        assert_eq!(explanation.names[1], None);
+        assert_eq!(explanation.descriptions[1], None);
+    }
+
+    #[test]
+    fn a_normal_three_form_file_is_untouched() {
+        let Ok(explanation) = UnitExplanation::parse("A|d1|d2|d3||\nB|e1|e2|e3||\nC|f1|f2|f3||", None) else {
+            panic!("the explanation file parsed to no text");
+        };
+
+        assert_eq!(explanation.names[2].as_deref(), Some("C"));
+        assert_eq!(explanation.descriptions[2], Some(vec!["f1".to_string(), "f2".to_string(), "f3".to_string()]));
+    }
 }
