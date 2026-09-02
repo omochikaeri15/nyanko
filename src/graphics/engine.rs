@@ -305,7 +305,7 @@ fn animate(model: &Model, animation: &Animation, frame: i32, parts: &mut [Part])
 ///
 /// Returns `None` before the modification's first keyframe, where the engine
 /// leaves the property alone entirely.
-fn evaluate(modification: &AnimModification, frame: i32) -> Option<i32> {
+pub(super) fn evaluate(modification: &AnimModification, frame: i32) -> Option<i32> {
     let keyframes = &modification.keyframes;
     let first = keyframes.first()?;
     let last = keyframes.last()?;
@@ -355,7 +355,7 @@ fn evaluate(modification: &AnimModification, frame: i32) -> Option<i32> {
 /// A modification replaying forever wraps over its span every time. One with a
 /// replay count wraps only while replays remain and then rests on its final
 /// keyframe, which is also where any other replay count lands immediately.
-fn local_frame(modification: &AnimModification, first: i32, last: i32, span: i32, frame: i32) -> i32 {
+pub(super) fn local_frame(modification: &AnimModification, first: i32, last: i32, span: i32, frame: i32) -> i32 {
     if last > frame { return frame; }
 
     let elapsed = frame.wrapping_sub(first) as i64;

@@ -107,7 +107,7 @@ pub enum Error {
     Rig(crate::graphics::rig::RigError),
     /// Resolved geometry could not be mapped back to the parts that drew it.
     #[cfg(feature = "graphics")]
-    Part(crate::graphics::part::PartError),
+    Part(crate::graphics::tools::part::PartError),
     /// An asset pack chunk or manifest could not be processed.
     #[cfg(feature = "pack")]
     Pack(crate::pack::cryptology::PackError),
@@ -410,8 +410,8 @@ impl From<crate::graphics::rig::RigError> for Error {
 }
 
 #[cfg(feature = "graphics")]
-impl From<crate::graphics::part::PartError> for Error {
-    fn from(source: crate::graphics::part::PartError) -> Self {
+impl From<crate::graphics::tools::part::PartError> for Error {
+    fn from(source: crate::graphics::tools::part::PartError) -> Self {
         Self::Part(source)
     }
 }

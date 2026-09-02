@@ -1,19 +1,19 @@
 //! The mapping from resolved geometry back to the model part that produced it.
 //!
-//! [`super::animate::resolve_frame`] flattens a posed rig into geometry and
-//! keeps no record of which part each quad came from, because the draw order is
-//! a depth sort and the pass skips parts as it goes. This module runs the same
-//! pass and reports the model index alongside each entry, so a consumer holding
-//! a part index can find the geometry that part drew.
+//! [`crate::graphics::animate::resolve_frame`] flattens a posed rig into
+//! geometry and keeps no record of which part each quad came from, because the
+//! draw order is a depth sort and the pass skips parts as it goes. This module
+//! runs the same pass and reports the model index alongside each entry, so a
+//! consumer holding a part index can find the geometry that part drew.
 
 use std::error;
 use std::fmt;
 use std::ptr;
 use std::slice;
 
-use super::animate::{resolve_frame, FrameData};
-use super::engine;
-use super::rig::{Animation, ModelPart, Rig};
+use crate::graphics::animate::{resolve_frame, FrameData};
+use crate::graphics::engine;
+use crate::graphics::rig::{Animation, ModelPart, Rig};
 
 /// Represents errors that can occur while mapping geometry back to model parts.
 #[derive(Debug, Clone, PartialEq, Eq)]
