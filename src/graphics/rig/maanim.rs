@@ -1,10 +1,13 @@
 use serde::Serialize;
 
 use crate::common::columns::{self, Column};
-use crate::common::file;
+use crate::common::stream::{declared_rows, Reader};
 use crate::graphics::tools::math;
 
 use super::RigError;
+
+/// The first format revision whose keyframe rows carry an easing exponent.
+const POWERED_VERSION: i32 = 1;
 
 /// A single control point on a modification's curve.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize)]
@@ -82,67 +85,62 @@ pub struct Animation {
 impl Animation {
     /// Parses a `.maanim` byte stream into a structured animation timeline.
     ///
-    /// The file opens with a tag line, a version, and a modification count.
-    /// Each modification is a header row followed by its keyframe count and that
-    /// many keyframe rows. Modifications that resolve to no keyframes are
-    /// dropped, matching the engine's inability to address them.
+    /// The first line is discarded unread, the second names the version and the
+    /// third the modification count. Each modification is a header row followed
+    /// by its keyframe count and that many keyframe rows, whose fourth column is
+    /// read only from the first format revision onwards.
+    ///
+    /// Exactly as many rows are read as each count declares, so a file that runs
+    /// out repeats the last row it managed to read rather than stopping short.
     ///
     /// # Arguments
     /// * `bytes` - The raw bytes of the unit's `.maanim` file.
     ///
     /// # Returns
     /// A `Result` containing the parsed `Animation` on success, or a `RigError`
-    /// if the file contained no readable lines.
+    /// if the file contained no readable lines or declared a count the engine
+    /// could not allocate.
     pub fn parse(bytes: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(bytes.as_ref())
     }
 
     fn parse_inner(bytes: &[u8]) -> Result<Self, RigError> {
-        let content = file::scrub(bytes);
-        let delimiter = file::resolve(None, &content);
-        let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
+        let content = String::from_utf8_lossy(bytes);
+        let mut reader = Reader::new(&content);
 
-        if lines.is_empty() { return Err(RigError::EmptyFile); }
+        if reader.line().is_none() { return Err(RigError::EmptyFile); }
 
-        let mut cursor = usize::from(lines[0].trim_start().starts_with('['));
+        reader.row();
+        let version = reader.value(0);
 
-        let version = lines.get(cursor).and_then(|line| line.trim().parse().ok()).unwrap_or(0);
-        cursor += 1;
+        reader.row();
+        let count = declared_rows(reader.value(0)).ok_or(RigError::CountTooLarge)?;
 
-        let count = lines.get(cursor).and_then(|line| line.trim().parse::<usize>().ok()).unwrap_or(0);
-        cursor += 1;
-
-        let mut modifications = Vec::with_capacity(count.min(lines.len()));
+        let mut modifications = Vec::with_capacity(count);
 
         for _ in 0..count {
-            let Some(header) = lines.get(cursor) else { break };
-            cursor += 1;
+            reader.row();
 
-            let row: Vec<&str> = header.split(delimiter).collect();
             let mut modification = AnimModification::default();
+            let trailing = columns::apply(&reader.scalars(), AnimModification::COLUMNS, &mut modification);
+            modification.name = reader.cells().get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
 
-            let trailing = columns::apply(&row, AnimModification::COLUMNS, &mut modification);
-            modification.name = row.get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
+            reader.row();
+            let keys = declared_rows(reader.value(0)).ok_or(RigError::CountTooLarge)?;
 
-            let Some(count_line) = lines.get(cursor) else { break };
-            cursor += 1;
+            modification.keyframes = Vec::with_capacity(keys);
 
-            let keyframe_count = count_line.split(delimiter).next()
-                .and_then(|text| text.trim().parse::<usize>().ok())
-                .unwrap_or(0);
+            for _ in 0..keys {
+                reader.row();
 
-            let declared = keyframe_count.min(lines.len().saturating_sub(cursor));
-            modification.keyframes.reserve(declared);
-
-            for index in 0..declared {
-                let row: Vec<&str> = lines[cursor + index].split(delimiter).collect();
                 let mut keyframe = Keyframe::default();
+                columns::apply(&reader.scalars(), Keyframe::COLUMNS, &mut keyframe);
 
-                columns::apply(&row, Keyframe::COLUMNS, &mut keyframe);
+                if version < POWERED_VERSION { keyframe.ease_power = 0; }
+
                 modification.keyframes.push(keyframe);
             }
 
-            cursor += declared;
             modifications.push(modification);
         }
 
@@ -316,54 +314,42 @@ impl Animation {
     /// # Returns
     /// An `Option` containing the animation's length in frames, minus one for a
     /// timeline that never ends, or `None` if the file contained no readable
-    /// lines.
+    /// lines or declared a count the engine could not allocate.
     pub fn scan_length(bytes: impl AsRef<[u8]>) -> Option<i32> {
         Self::scan_length_inner(bytes.as_ref())
     }
 
     fn scan_length_inner(bytes: &[u8]) -> Option<i32> {
-        let content = file::scrub(bytes);
-        let delimiter = file::resolve(None, &content);
-        let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
+        let content = String::from_utf8_lossy(bytes);
+        let mut reader = Reader::new(&content);
 
-        if lines.is_empty() { return None; }
+        reader.line()?;
 
-        let mut cursor = usize::from(lines[0].trim_start().starts_with('['));
-        cursor += 1;
-
-        let count = lines.get(cursor).and_then(|line| line.trim().parse::<usize>().ok()).unwrap_or(0);
-        cursor += 1;
-
-        let frame_at = |index: usize| -> i32 {
-            lines.get(index)
-                .and_then(|line| line.split(delimiter).next())
-                .and_then(|text| text.trim().parse().ok())
-                .unwrap_or(0)
-        };
+        reader.row();
+        reader.row();
+        let count = declared_rows(reader.value(0))?;
 
         let mut longest = 0;
 
         for _ in 0..count {
-            let Some(header) = lines.get(cursor) else { break };
-            cursor += 1;
-
-            let loop_count = header.split(delimiter).nth(2)
-                .and_then(|text| text.trim().parse::<i32>().ok())
-                .unwrap_or(0);
+            reader.row();
+            let loop_count = reader.value(2);
 
             if loop_count == -1 { return Some(-1); }
 
-            let Some(count_line) = lines.get(cursor) else { break };
-            cursor += 1;
+            reader.row();
+            let keys = declared_rows(reader.value(0))?;
 
-            let keyframe_count = count_line.split(delimiter).next()
-                .and_then(|text| text.trim().parse::<usize>().ok())
-                .unwrap_or(0);
+            let (mut first, mut last) = (0, 0);
 
-            let declared = keyframe_count.min(lines.len().saturating_sub(cursor));
+            for index in 0..keys {
+                reader.row();
 
-            if declared > 0 {
-                let (first, last) = (frame_at(cursor), frame_at(cursor + declared - 1));
+                last = reader.value(0);
+                if index == 0 { first = last; }
+            }
+
+            if keys > 0 {
                 let played = loop_count
                     .wrapping_sub(1)
                     .wrapping_mul(last.wrapping_sub(first))
@@ -371,8 +357,6 @@ impl Animation {
 
                 if played >= longest { longest = played.wrapping_add(1); }
             }
-
-            cursor += declared;
         }
 
         Some(longest)
@@ -382,6 +366,65 @@ impl Animation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn file(version: i32, tail: &[&str]) -> String {
+        let mut lines = vec!["[modelanim:animation]".to_string(), version.to_string()];
+        lines.extend(tail.iter().map(|line| (*line).to_string()));
+
+        lines.join("\n")
+    }
+
+    #[test]
+    fn a_version_below_one_carries_no_easing_exponent() {
+        let tail = ["1", "0,4,1,0,0,move", "1", "0,50,3,7"];
+
+        assert_eq!(
+            Animation::parse(file(0, &tail)).map(|anim| anim.modifications[0].keyframes[0].ease_power),
+            Ok(0),
+        );
+        assert_eq!(
+            Animation::parse(file(1, &tail)).map(|anim| anim.modifications[0].keyframes[0].ease_power),
+            Ok(7),
+        );
+    }
+
+    #[test]
+    fn a_blank_line_is_a_row_like_any_other() {
+        let anim = Animation::parse(file(1, &["1", "", "1", "5,50,0,0"])).expect("a timeline parses");
+
+        assert_eq!(anim.modifications[0].part, 0);
+        assert_eq!(anim.modifications[0].loop_count, 0);
+        assert_eq!(anim.modifications[0].keyframes.len(), 1);
+    }
+
+    #[test]
+    fn a_file_that_runs_out_repeats_the_last_row_it_read() {
+        let truncated = file(1, &["1", "0,4,1,0,0,move", "3", "5,50,0,0"]);
+        let anim = Animation::parse(&truncated).expect("a timeline parses");
+
+        let keyframes = &anim.modifications[0].keyframes;
+
+        assert_eq!(keyframes.len(), 3);
+        assert_eq!(keyframes[1], keyframes[0]);
+        assert_eq!(keyframes[2], keyframes[0]);
+        assert_eq!(Animation::scan_length(&truncated), Some(anim.length()));
+    }
+
+    #[test]
+    fn a_count_the_engine_aborts_on_is_refused() {
+        assert_eq!(Animation::parse(file(1, &["-1"])), Err(RigError::CountTooLarge));
+        assert_eq!(Animation::parse(file(1, &["1", "0,4,1,0,0", "-2"])), Err(RigError::CountTooLarge));
+        assert_eq!(Animation::parse(""), Err(RigError::EmptyFile));
+    }
+
+    #[test]
+    fn a_declared_modification_survives_holding_no_keyframes() {
+        let anim = Animation::parse(file(1, &["2", "0,4,1,0,0", "0", "1,4,-1,0,0", "0"]))
+            .expect("a timeline parses");
+
+        assert_eq!(anim.modifications.len(), 2);
+        assert_eq!(anim.length(), -1);
+    }
 
     fn modification(loop_count: i32, frames: &[i32]) -> AnimModification {
         AnimModification {

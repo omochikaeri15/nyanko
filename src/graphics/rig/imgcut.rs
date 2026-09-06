@@ -5,7 +5,7 @@ use image::{self, RgbaImage};
 use serde::Serialize;
 
 use crate::common::columns::{self, Column};
-use crate::common::file;
+use crate::common::stream::{cell_value, declared_rows, Reader};
 
 use super::RigError;
 
@@ -105,14 +105,19 @@ impl SpriteSheet {
     /// zeroed. A texture that fails to decode is passed through salvage before
     /// being abandoned.
     ///
+    /// The cut list's first three lines are discarded unread beyond the version
+    /// and atlas name they carry, and exactly as many region rows are read as the
+    /// fourth line declares, so trailing rows are ignored and a file that runs out
+    /// repeats the last row it managed to read.
+    ///
     /// # Arguments
     /// * `png` - The raw bytes of the PNG texture atlas.
     /// * `imgcut` - The raw bytes of the `.imgcut` sprite region list.
     ///
     /// # Returns
     /// A `Result` containing the resolved `SpriteSheet` on success, or a
-    /// `RigError` if the atlas could not be decoded or the cut list described no
-    /// usable regions.
+    /// `RigError` if the atlas could not be decoded, the cut list described no
+    /// usable regions, or it declared a count the engine could not allocate.
     pub fn parse(png: impl AsRef<[u8]>, imgcut: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(png.as_ref(), imgcut.as_ref())
     }
@@ -143,32 +148,25 @@ impl SpriteSheet {
             }
         }
 
-        let content = file::scrub(imgcut);
-        let delimiter = file::resolve(None, &content);
-        let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
+        let content = String::from_utf8_lossy(imgcut);
+        let mut reader = Reader::new(&content);
 
-        let mut cursor = usize::from(lines.first().is_some_and(|line| line.trim_start().starts_with('[')));
+        reader.line();
 
-        let version = lines.get(cursor).and_then(|line| line.trim().parse().ok()).unwrap_or(0);
-        cursor += 1;
+        let version = reader.line().map_or(0, cell_value);
+        let image_name = reader.line().map(|line| line.trim().to_string()).unwrap_or_default();
 
-        let image_name = lines.get(cursor).map(|line| line.trim().to_string()).unwrap_or_default();
-        cursor += 1;
+        reader.row();
+        let count = declared_rows(reader.value(0)).ok_or(RigError::CountTooLarge)?;
 
-        let count = lines.get(cursor)
-            .and_then(|line| line.trim().parse::<usize>().ok())
-            .ok_or(RigError::NoSpriteCuts)?;
-        cursor += 1;
+        let mut cuts = Vec::with_capacity(count);
 
-        let declared = count.min(lines.len().saturating_sub(cursor));
-        let mut cuts = Vec::with_capacity(declared);
+        for _ in 0..count {
+            reader.row();
 
-        for index in 0..declared {
-            let row: Vec<&str> = lines[cursor + index].split(delimiter).collect();
             let mut cut = SpriteCut::default();
-
-            let trailing = columns::apply(&row, SpriteCut::COLUMNS, &mut cut);
-            cut.name = row.get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
+            let trailing = columns::apply(&reader.scalars(), SpriteCut::COLUMNS, &mut cut);
+            cut.name = reader.cells().get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
 
             cuts.push(cut);
         }
@@ -526,6 +524,56 @@ mod tests {
 
             image::Rgba(if solid { [255, 255, 255, 255] } else { [0, 0, 0, 0] })
         })
+    }
+
+    fn png() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let image = RgbaImage::new(4, 4);
+
+        image
+            .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .map_or_else(|_| Vec::new(), |()| bytes)
+    }
+
+    fn list(header: &[&str], cuts: &[&str]) -> String {
+        let mut lines: Vec<&str> = header.to_vec();
+        lines.extend_from_slice(cuts);
+
+        lines.join("\n")
+    }
+
+    #[test]
+    fn three_header_lines_are_discarded_whatever_they_hold() {
+        let sheet = SpriteSheet::parse(png(), list(&["[imgcut]", "1", "atlas.png", "1"], &["0,0,4,4,face"]))
+            .expect("a cut list parses");
+
+        assert_eq!(sheet.version, 1);
+        assert_eq!(sheet.image_name, "atlas.png");
+        assert_eq!(sheet.cuts.len(), 1);
+        assert_eq!(sheet.cuts[0].name, "face");
+
+        let shifted = SpriteSheet::parse(png(), list(&["", "[imgcut]", "1", "atlas.png", "1"], &["0,0,4,4"]));
+
+        assert_eq!(shifted.err(), Some(RigError::NoSpriteCuts));
+    }
+
+    #[test]
+    fn only_as_many_rows_are_read_as_the_count_declares() {
+        let sheet = SpriteSheet::parse(png(), list(&["[imgcut]", "0", "atlas.png", "2"], &["0,0,1,1", "1,1,2,2", "2,2,3,3"]))
+            .expect("a cut list parses");
+
+        assert_eq!(sheet.cuts.len(), 2);
+
+        let truncated = SpriteSheet::parse(png(), list(&["[imgcut]", "0", "atlas.png", "3"], &["0,0,1,1"]))
+            .expect("a cut list parses");
+
+        assert_eq!(truncated.cuts.len(), 3);
+        assert_eq!(truncated.cuts[2], truncated.cuts[0]);
+
+        assert_eq!(
+            SpriteSheet::parse(png(), list(&["[imgcut]", "0", "atlas.png", "-1"], &[])).err(),
+            Some(RigError::CountTooLarge),
+        );
     }
 
     fn whole(image: &RgbaImage) -> SpriteCut {

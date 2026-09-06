@@ -19,11 +19,13 @@ pub use imgcut::{Opaque, SpriteCut, SpriteSheet};
 pub use maanim::{AnimModification, Animation, Keyframe};
 pub use mamodel::{Alignment, Model, ModelPart};
 
+pub(crate) use mamodel::ALIGNED_VERSION;
+
 /// Represents errors that can occur while parsing a unit's rig or animations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RigError {
-    /// The supplied bytes contained no non-empty lines.
+    /// The supplied bytes contained no lines at all.
     EmptyFile,
     /// The supplied bytes were too short to contain a complete file header.
     TruncatedHeader,
@@ -33,16 +35,19 @@ pub enum RigError {
     ImageDecodeFailed,
     /// The atlas decoded successfully but its cut list described no usable sprite regions.
     NoSpriteCuts,
+    /// A declared row count was negative or larger than the engine's own resize could allocate.
+    CountTooLarge,
 }
 
 impl fmt::Display for RigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyFile => write!(f, "The provided file bytes contained no readable lines."),
+            Self::EmptyFile => write!(f, "The provided file bytes contained no lines at all."),
             Self::TruncatedHeader => write!(f, "The provided bytes were too short to contain a complete header."),
             Self::NoPartHeader => write!(f, "No usable model part count was declared in the file header."),
             Self::ImageDecodeFailed => write!(f, "The texture atlas could not be decoded or salvaged."),
             Self::NoSpriteCuts => write!(f, "The sprite cut list described no usable regions."),
+            Self::CountTooLarge => write!(f, "A declared row count was negative or too large to allocate."),
         }
     }
 }

@@ -1,9 +1,24 @@
 use serde::Serialize;
 
 use crate::common::columns::{self, Column};
-use crate::common::file;
+use crate::common::stream::{declared_rows, Reader};
 
 use super::RigError;
+
+/// The first format revision whose part rows carry a blending column.
+const GLOW_VERSION: i32 = 2;
+
+/// The first format revision whose models carry an alignment block.
+pub(crate) const ALIGNED_VERSION: i32 = 3;
+
+/// The scale divisor the engine hands a model that declares no units row.
+const UNVERSIONED_SCALE: i32 = 100;
+
+/// The angle divisor the engine hands a model that declares no units row.
+const UNVERSIONED_ANGLE: i32 = 360;
+
+/// The opacity divisor the engine hands a model that declares no units row.
+const UNVERSIONED_OPACITY: i32 = 255;
 
 /// One model part in its rest pose, before any animation is applied.
 ///
@@ -67,13 +82,13 @@ impl ModelPart {
 /// One row of the trailing block that positions a model against the world.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Alignment {
-    /// The first column, whose meaning the engine does not read.
-    pub unknown_0: i32,
+    /// The index of the part the row's offset is measured against.
+    pub part: i32,
     /// The second column, whose meaning the engine does not read.
     pub unknown_1: i32,
-    /// The horizontal offset subtracted from the root part's pivot.
+    /// The horizontal offset subtracted from the pivot of the part the row names.
     pub x: i32,
-    /// The vertical offset subtracted from the root part's pivot.
+    /// The vertical offset subtracted from the pivot of the part the row names.
     pub y: i32,
     /// The fifth column, whose meaning the engine does not read.
     pub unknown_4: i32,
@@ -90,7 +105,7 @@ impl Alignment {
     /// from the parser's own table instead of restating it. [`Alignment::name`]
     /// is the row's trailing text rather than a column.
     pub const COLUMNS: &'static [Column<Self>] = columns::columns! {
-        unknown_0 : 0;
+        part      : 0;
         unknown_1 : 1;
         x         : 2;
         y         : 3;
@@ -114,7 +129,7 @@ pub struct Model {
     pub opacity_unit: i32,
     /// The fourth unit column, present only in the second format revision.
     pub unknown_3: Option<i32>,
-    /// The trailing alignment rows, of which the engine reads only the first.
+    /// The trailing alignment rows, of which the engine reads the first for an enemy and the second for a cat.
     pub alignment: Vec<Alignment>,
 }
 
@@ -135,82 +150,84 @@ impl Default for Model {
 impl Model {
     /// Parses a `.mamodel` byte stream into a structured `Model` hierarchy.
     ///
-    /// The file opens with a tag line, a version, and a part count, after which
-    /// each part occupies one row. A units row follows the parts, then a count
-    /// and that many alignment rows.
+    /// The first line is discarded unread, the second names the version and the
+    /// third the part count, after which each part occupies one row. A model of
+    /// the first revision or later then declares its unit divisors on one row,
+    /// and one of the third revision or later follows that with an alignment
+    /// count and that many rows. A model below the first revision declares
+    /// neither and takes the divisors the engine hands it.
+    ///
+    /// Exactly as many rows are read as each count declares, so a file that runs
+    /// out repeats the last row it managed to read rather than stopping short.
     ///
     /// # Arguments
     /// * `bytes` - The raw byte data of the `.mamodel` file.
     ///
     /// # Returns
     /// A `Result` containing the parsed `Model` on success, or a `RigError` if
-    /// the file was empty or declared no usable part count.
+    /// the file was empty, declared no usable part count, or declared a count the
+    /// engine could not allocate.
     pub fn parse(bytes: impl AsRef<[u8]>) -> Result<Self, RigError> {
         Self::parse_inner(bytes.as_ref())
     }
 
     fn parse_inner(bytes: &[u8]) -> Result<Self, RigError> {
-        let content = file::scrub(bytes);
-        let delimiter = file::resolve(None, &content);
-        let lines: Vec<&str> = content.lines().filter(|line| !line.trim().is_empty()).collect();
+        let content = String::from_utf8_lossy(bytes);
+        let mut reader = Reader::new(&content);
 
-        if lines.is_empty() { return Err(RigError::EmptyFile); }
+        if reader.line().is_none() { return Err(RigError::EmptyFile); }
 
-        let mut cursor = usize::from(lines[0].trim_start().starts_with('['));
+        reader.row();
+        let version = reader.value(0);
 
-        let version = lines.get(cursor).and_then(|line| line.trim().parse().ok()).unwrap_or(0);
-        cursor += 1;
-
-        let count = lines.get(cursor)
-            .and_then(|line| line.trim().parse::<usize>().ok())
-            .ok_or(RigError::NoPartHeader)?;
-        cursor += 1;
+        reader.row();
+        let count = declared_rows(reader.value(0)).ok_or(RigError::CountTooLarge)?;
 
         if count == 0 { return Err(RigError::NoPartHeader); }
 
-        let declared = count.min(lines.len().saturating_sub(cursor));
-        let mut parts = Vec::with_capacity(declared);
+        let mut parts = Vec::with_capacity(count);
 
-        for index in 0..declared {
-            let row: Vec<&str> = lines[cursor + index].split(delimiter).collect();
+        for _ in 0..count {
+            reader.row();
+
             let mut part = ModelPart::default();
+            let trailing = columns::apply(&reader.scalars(), ModelPart::COLUMNS, &mut part);
 
-            let trailing = columns::apply(&row, ModelPart::COLUMNS, &mut part);
-            part.name = row.get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
+            if version < GLOW_VERSION { part.glow = 0; }
+            part.name = reader.cells().get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
 
             parts.push(part);
         }
 
-        if parts.is_empty() { return Err(RigError::NoPartHeader); }
-        cursor += declared;
-
         let mut model = Model { version, parts, ..Model::default() };
 
-        if let Some(units) = lines.get(cursor) {
-            let columns: Vec<&str> = units.split(delimiter).collect();
-            let column = |at: usize| columns.get(at).and_then(|text| text.trim().parse::<i32>().ok());
+        if version <= 0 {
+            model.scale_unit = UNVERSIONED_SCALE;
+            model.angle_unit = UNVERSIONED_ANGLE;
+            model.opacity_unit = UNVERSIONED_OPACITY;
 
-            model.scale_unit = column(0).unwrap_or(model.scale_unit);
-            model.angle_unit = column(1).unwrap_or(model.angle_unit);
-            model.opacity_unit = column(2).unwrap_or(model.opacity_unit);
-            model.unknown_3 = column(3);
-            cursor += 1;
+            return Ok(model);
         }
 
-        let alignment_count = lines.get(cursor)
-            .and_then(|line| line.trim().parse::<usize>().ok())
-            .unwrap_or(0);
-        cursor += 1;
+        reader.row();
+        model.scale_unit = reader.value(0);
+        model.angle_unit = reader.value(1);
+        model.opacity_unit = reader.value(2);
+        model.unknown_3 = (reader.cells().len() > 3).then(|| reader.value(3));
 
-        let declared = alignment_count.min(lines.len().saturating_sub(cursor));
-        model.alignment = Vec::with_capacity(declared);
+        if version < ALIGNED_VERSION { return Ok(model); }
 
-        for index in 0..declared {
-            let row: Vec<&str> = lines[cursor + index].split(delimiter).collect();
+        reader.row();
+        let count = declared_rows(reader.value(0)).ok_or(RigError::CountTooLarge)?;
+
+        model.alignment = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            reader.row();
+
             let mut alignment = Alignment::default();
-
-            let trailing = columns::apply(&row, Alignment::COLUMNS, &mut alignment);
-            alignment.name = row.get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
+            let trailing = columns::apply(&reader.scalars(), Alignment::COLUMNS, &mut alignment);
+            alignment.name = reader.cells().get(trailing).map(|text| text.trim().to_string()).unwrap_or_default();
 
             model.alignment.push(alignment);
         }
@@ -222,6 +239,66 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PART: &str = "0,1,2,3,4,5,6,7,8,9,10,11,12,body";
+
+    fn file(version: i32, tail: &[&str]) -> String {
+        let mut lines = vec!["[modelanim:model]".to_string(), version.to_string(), "1".to_string(), PART.to_string()];
+        lines.extend(tail.iter().map(|line| (*line).to_string()));
+
+        lines.join("\n")
+    }
+
+    #[test]
+    fn a_version_below_one_takes_the_engines_own_divisors_and_reads_no_further() {
+        let model = Model::parse(file(0, &["7,8,9", "1", "0,0,10,20,0,0"])).expect("a model parses");
+
+        assert_eq!(
+            (model.scale_unit, model.angle_unit, model.opacity_unit, model.unknown_3),
+            (UNVERSIONED_SCALE, UNVERSIONED_ANGLE, UNVERSIONED_OPACITY, None),
+        );
+        assert_eq!(model.alignment, Vec::new());
+    }
+
+    #[test]
+    fn a_version_below_two_carries_no_blending_column() {
+        assert_eq!(Model::parse(file(1, &["7,8,9"])).map(|model| model.parts[0].glow), Ok(0));
+        assert_eq!(Model::parse(file(2, &["7,8,9"])).map(|model| model.parts[0].glow), Ok(12));
+    }
+
+    #[test]
+    fn a_version_below_three_reads_the_units_row_and_stops() {
+        let model = Model::parse(file(2, &["7,8,9,10", "1", "0,0,10,20,0,0"])).expect("a model parses");
+
+        assert_eq!((model.scale_unit, model.angle_unit, model.opacity_unit), (7, 8, 9));
+        assert_eq!(model.unknown_3, Some(10));
+        assert_eq!(model.alignment, Vec::new());
+    }
+
+    #[test]
+    fn a_blank_line_is_a_row_like_any_other() {
+        let model = Model::parse(file(3, &["", "7,8,9", "0"])).expect("a model parses");
+
+        assert_eq!((model.scale_unit, model.angle_unit, model.opacity_unit), (0, 0, 0));
+    }
+
+    #[test]
+    fn a_file_that_runs_out_repeats_the_last_row_it_read() {
+        let truncated = "[modelanim:model]\n3\n3\n0,1,2,3,4,5,6,7,8,9,10,11,12,body";
+        let model = Model::parse(truncated).expect("a model parses");
+
+        assert_eq!(model.parts.len(), 3);
+        assert_eq!(model.parts[1], model.parts[0]);
+        assert_eq!(model.parts[2], model.parts[0]);
+    }
+
+    #[test]
+    fn a_count_the_engine_aborts_on_is_refused() {
+        assert_eq!(Model::parse("[modelanim:model]\n3\n-1"), Err(RigError::CountTooLarge));
+        assert_eq!(Model::parse(file(3, &["7,8,9", "-4"])), Err(RigError::CountTooLarge));
+        assert_eq!(Model::parse(""), Err(RigError::EmptyFile));
+        assert_eq!(Model::parse("[modelanim:model]\n3\n0"), Err(RigError::NoPartHeader));
+    }
 
     #[test]
     fn part_columns_map_one_field_each() {

@@ -6,8 +6,13 @@
 //! divides by a zero unit column, `engine::polynomial` skips a term where the
 //! engine divides by the gap between two keyframes naming one frame, and
 //! `engine::deploy` reads a rig's single sprite sheet where the engine indexes
-//! an array of them by the part's resolved identifier. Nothing here changes how
-//! a frame resolves; it reports where the two disagree.
+//! an array of them by the part's resolved identifier. Two more sit outside the
+//! frame pass entirely: `animate::shift` leaves a rig alone where its alignment
+//! block does not reach the row asked for and the engine dereferences that row
+//! regardless, and nothing here advances an entity's frame counter at all where
+//! the engine takes the next frame modulo an animation length it never checks.
+//! Nothing here changes how a frame resolves; it reports where the two
+//! disagree.
 //!
 //! Only the states the decompilation settles are reported. A shape the engine
 //! guards is not a fault however malformed it looks: a modification whose first
@@ -16,13 +21,43 @@
 //! parent cycle are all handled by the engine and are absent from this module by
 //! design.
 
-use crate::graphics::rig::{AnimModification, Animation, Keyframe, Model};
+use crate::graphics::rig::{AnimModification, Animation, Keyframe, Model, ALIGNED_VERSION};
 
 /// The interpolation whose term the engine divides by the gap between two keyframes.
 const EASE_POLYNOMIAL: i32 = 3;
 
 /// The identifier that marks a part the engine never draws.
 const NOT_DRAWN: i32 = -1;
+
+/// The length the engine reports for an animation that never ends.
+const ENDLESS: i32 = -1;
+
+/// The entity map a rig is installed into.
+///
+/// The engine keeps one animation map and one alignment index per side, so the
+/// same files reach a different division depending on which of the two a rig is
+/// drawn as. A caller that cannot tell the two apart states [`Side::Either`],
+/// which reports every state either of them faults on and so reports a rig only
+/// the other side would have crashed on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Side {
+    /// The enemy side, whose attacking frame counter falls back to the furthest keyframe and whose placement reads the first alignment row.
+    Enemy,
+    /// The cat side, covering forms and souls, whose attacking frame counter has no fallback and whose placement reads the second alignment row as well as the first.
+    Cat,
+    /// Neither side in particular, which reports what the two of them reach together.
+    Either,
+}
+
+impl Side {
+    /// The alignment rows the engine indexes for a rig on this side.
+    fn rows(self) -> &'static [usize] {
+        match self {
+            Self::Enemy => &[0],
+            Self::Cat | Self::Either => &[0, 1],
+        }
+    }
+}
 
 /// A state in which the game's own animation pass faults.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -45,6 +80,22 @@ pub enum Fault {
     ForeignSheet {
         /// The identifier the part's second column names.
         id: i32,
+    },
+    /// The attack animation measures no frames, which the frame counter takes the next frame modulo.
+    AttackLength,
+    /// The attack animation never ends and reaches no frame past zero, which an attacking enemy's frame counter takes the next frame modulo instead.
+    EndlessAttack,
+    /// An alignment row the side's placement reads is absent, which it dereferences as a null pointer.
+    MissingAlignment {
+        /// The index of the row the engine reads.
+        row: usize,
+    },
+    /// An alignment row names a part the model does not hold, which the loader caches as a pointer past the part array and the placement dereferences.
+    StrayAlignment {
+        /// The index of the alignment row.
+        row: usize,
+        /// The part index the row's first column names.
+        part: i32,
     },
 }
 
@@ -120,6 +171,49 @@ pub fn sheet_faults(model: &Model, unit: i32) -> Vec<Sited> {
         .collect()
 }
 
+/// Reports the faults a model's alignment block carries on the side it is drawn as.
+///
+/// The draw pass reads the first alignment row for every entity it puts on
+/// screen and the bounding pass reads the second for a cat, neither of them
+/// checking the index against the rows the model declares, so a row the side
+/// reaches past is dereferenced as a null pointer. A model below the third
+/// format revision carries no alignment block at all whatever rows trail its
+/// units row, and reaches that null on the first row.
+///
+/// Each row caches a pointer to the part its first column names, computed as an
+/// offset into the part array when the model loads and bounds checked at
+/// neither end, so a row naming a part the model does not hold is dereferenced
+/// as a pointer past that array. Every row carries one, so a row is reported
+/// wherever it sits rather than only where this side reads it.
+///
+/// A rig of no stated side is held to both rows, so a model carrying the single
+/// row an enemy needs is reported for the second row a cat would have read.
+///
+/// # Arguments
+/// * `model` - The parsed part hierarchy to inspect.
+/// * `side` - The entity map the rig is installed into.
+///
+/// # Returns
+/// A `Vec<Sited>` holding one entry per row the side reads and the model lacks
+/// followed by one per row naming a part outside the model, each sited on
+/// neither a part nor a modification, and empty for a model the engine can
+/// align.
+pub fn alignment_faults(model: &Model, side: Side) -> Vec<Sited> {
+    let whole_file = |fault| Sited { fault, part: None, track: None };
+    let rows = if model.version >= ALIGNED_VERSION { model.alignment.as_slice() } else { &[] };
+
+    let missing = side.rows().iter()
+        .filter(|row| **row >= rows.len())
+        .map(|row| whole_file(Fault::MissingAlignment { row: *row }));
+
+    let stray = rows.iter()
+        .enumerate()
+        .filter(|(_, align)| !usize::try_from(align.part).is_ok_and(|part| part < model.parts.len()))
+        .map(|(row, align)| whole_file(Fault::StrayAlignment { row, part: align.part }));
+
+    missing.chain(stray).collect()
+}
+
 /// Reports the faults an animation carries when played against a model.
 ///
 /// Only the polynomial easing divides by the gap between two keyframes, and it
@@ -155,6 +249,37 @@ pub fn anim_faults(anim: &Animation, model: &Model) -> Vec<Sited> {
     }
 
     faults
+}
+
+/// Reports the faults an attack animation carries on the side it is played on.
+///
+/// An attacking entity advances by taking its next frame modulo the animation's
+/// length, which is unguarded, so an animation measuring no frames faults on the
+/// first advance. An enemy whose attack animation never ends takes that frame
+/// modulo the furthest frame any modification reaches instead, which is equally
+/// unguarded, so an endless animation holding every modification at frame zero
+/// faults there. A cat reaching the same state divides by minus one, which the
+/// engine survives, so a rig of no stated side reports it where a cat does not.
+///
+/// The animation is the rig's third slot, which the engine files under `_e02`,
+/// `_f02`, `_c02` and `_s02`. No other slot reaches either division.
+///
+/// # Arguments
+/// * `attack` - The parsed animation occupying the rig's attack slot.
+/// * `side` - The entity map the rig is installed into.
+///
+/// # Returns
+/// A `Vec<Sited>` holding the one fault the animation carries, sited on neither
+/// a part nor a modification, and empty for an animation the frame counter can
+/// advance.
+pub fn attack_faults(attack: &Animation, side: Side) -> Vec<Sited> {
+    let whole_file = |fault| vec![Sited { fault, part: None, track: None }];
+
+    match (side, attack.length()) {
+        (Side::Enemy | Side::Either, ENDLESS) if attack.last_frame() == 0 => whole_file(Fault::EndlessAttack),
+        (_, 0) => whole_file(Fault::AttackLength),
+        _ => Vec::new(),
+    }
 }
 
 /// Collects the keyframe pairs a reachable polynomial run divides a zero gap by.
@@ -221,7 +346,7 @@ fn locals(modification: &AnimModification) -> Option<(i32, i32)> {
 
 #[cfg(test)]
 mod tests {
-    use crate::graphics::rig::ModelPart;
+    use crate::graphics::rig::{Alignment, ModelPart};
     use crate::graphics::tools::timeline;
 
     use super::*;
@@ -251,6 +376,25 @@ mod tests {
         Model {
             parts: ids.iter().map(|id| ModelPart { id: *id, ..ModelPart::default() }).collect(),
             ..Model::default()
+        }
+    }
+
+    fn aligned(version: i32, parts: usize, rows: &[i32]) -> Model {
+        Model {
+            version,
+            alignment: rows.iter().map(|part| Alignment { part: *part, ..Alignment::default() }).collect(),
+            ..model(parts)
+        }
+    }
+
+    fn attack(loop_count: i32, frames: &[i32]) -> Animation {
+        Animation {
+            version: 1,
+            modifications: vec![AnimModification {
+                loop_count,
+                keyframes: frames.iter().map(|frame| keyframe(*frame, 0)).collect(),
+                ..AnimModification::default()
+            }],
         }
     }
 
@@ -307,6 +451,112 @@ mod tests {
 
         assert_eq!(sheet_faults(&borrowed, 34), Vec::new());
         assert_eq!(sheet_faults(&stamped(&[-1, -1]), 7), Vec::new());
+    }
+
+    #[test]
+    fn an_attack_animation_measuring_no_frames_is_caught_on_either_side() {
+        let bare = Animation::default();
+        let keyless = attack(1, &[]);
+
+        for side in [Side::Enemy, Side::Cat, Side::Either] {
+            assert_eq!(
+                attack_faults(&bare, side),
+                vec![Sited { fault: Fault::AttackLength, part: None, track: None }],
+                "{side:?}",
+            );
+            assert_eq!(attack_faults(&keyless, side), attack_faults(&bare, side), "{side:?}");
+        }
+    }
+
+    #[test]
+    fn an_endless_attack_resting_on_frame_zero_is_caught_for_an_enemy_alone() {
+        let stuck = attack(-1, &[0, 0]);
+
+        assert_eq!(stuck.length(), -1);
+        assert_eq!(
+            attack_faults(&stuck, Side::Enemy),
+            vec![Sited { fault: Fault::EndlessAttack, part: None, track: None }],
+        );
+        assert_eq!(attack_faults(&stuck, Side::Cat), Vec::new());
+    }
+
+    #[test]
+    fn an_attack_animation_the_counter_can_advance_is_clean() {
+        for side in [Side::Enemy, Side::Cat, Side::Either] {
+            assert_eq!(attack_faults(&attack(-1, &[0, 30]), side), Vec::new(), "{side:?}");
+            assert_eq!(attack_faults(&attack(1, &[0, 24]), side), Vec::new(), "{side:?}");
+        }
+    }
+
+    #[test]
+    fn a_side_reaching_past_the_alignment_block_is_caught_row_by_row() {
+        let none = aligned(3, 2, &[]);
+
+        assert_eq!(
+            alignment_faults(&none, Side::Enemy),
+            vec![Sited { fault: Fault::MissingAlignment { row: 0 }, part: None, track: None }],
+        );
+        assert_eq!(
+            alignment_faults(&none, Side::Cat),
+            vec![
+                Sited { fault: Fault::MissingAlignment { row: 0 }, part: None, track: None },
+                Sited { fault: Fault::MissingAlignment { row: 1 }, part: None, track: None },
+            ],
+        );
+
+        let one = aligned(3, 2, &[0]);
+
+        assert_eq!(alignment_faults(&one, Side::Enemy), Vec::new());
+        assert_eq!(
+            alignment_faults(&one, Side::Cat),
+            vec![Sited { fault: Fault::MissingAlignment { row: 1 }, part: None, track: None }],
+        );
+
+        assert_eq!(alignment_faults(&aligned(3, 2, &[0, 1]), Side::Cat), Vec::new());
+    }
+
+    #[test]
+    fn a_rig_of_no_stated_side_reports_what_either_side_would_reach() {
+        let stuck = attack(-1, &[0, 0]);
+
+        assert_eq!(attack_faults(&stuck, Side::Cat), Vec::new());
+        assert_eq!(
+            attack_faults(&stuck, Side::Either),
+            vec![Sited { fault: Fault::EndlessAttack, part: None, track: None }],
+        );
+
+        let enemy = aligned(3, 2, &[0]);
+
+        assert_eq!(alignment_faults(&enemy, Side::Enemy), Vec::new());
+        assert_eq!(
+            alignment_faults(&enemy, Side::Either),
+            vec![Sited { fault: Fault::MissingAlignment { row: 1 }, part: None, track: None }],
+        );
+
+        assert_eq!(alignment_faults(&aligned(3, 2, &[0, 1]), Side::Either), Vec::new());
+    }
+
+    #[test]
+    fn a_model_below_the_third_revision_carries_no_alignment_block() {
+        let rows = aligned(2, 2, &[0, 1]);
+
+        assert_eq!(
+            alignment_faults(&rows, Side::Enemy),
+            vec![Sited { fault: Fault::MissingAlignment { row: 0 }, part: None, track: None }],
+        );
+    }
+
+    #[test]
+    fn an_alignment_row_naming_a_part_the_model_lacks_is_caught_wherever_it_sits() {
+        let stray = aligned(3, 2, &[0, 5, -1]);
+
+        assert_eq!(
+            alignment_faults(&stray, Side::Enemy),
+            vec![
+                Sited { fault: Fault::StrayAlignment { row: 1, part: 5 }, part: None, track: None },
+                Sited { fault: Fault::StrayAlignment { row: 2, part: -1 }, part: None, track: None },
+            ],
+        );
     }
 
     #[test]
