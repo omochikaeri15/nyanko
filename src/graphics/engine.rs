@@ -8,6 +8,8 @@
 //! Nothing here is public. A final draw pass flattens the placed parts into the
 //! geometry a caller consumes, mirroring the engine's own draw call.
 
+use std::ptr;
+
 use super::animate::FrameData;
 use super::rig::{AnimModification, Animation, Keyframe, Model, ModelPart, Rig, SpriteSheet};
 
@@ -37,9 +39,9 @@ pub(super) const INDICES: [u16; 6] = [0, 1, 2, 3, 2, 1];
 
 /// A whole-pixel position, which is the only precision the engine keeps corners at.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct Point {
-    x: i32,
-    y: i32,
+pub(super) struct Point {
+    pub(super) x: i32,
+    pub(super) y: i32,
 }
 
 /// The two by three affine the engine composes down the part hierarchy.
@@ -541,6 +543,34 @@ fn deploy(parts: &mut [Part], index: usize, model: &Model, sheet: &SpriteSheet) 
     for corner in &mut part.world.corners {
         *corner = part.world.transform.apply(*corner);
     }
+}
+
+/// Resolves the world point an alignment row places the rig by.
+///
+/// The row names the part it is measured against and an offset from that part's
+/// pivot. The pivot the engine subtracts is the animated one, the scale it then
+/// applies is the part's world scale composed down the hierarchy, and the pair
+/// is carried into the world by the same matrix the part's own corners went
+/// through, so a row whose part turns makes the whole rig swing about the point.
+///
+/// The engine reads the row and the part it names unchecked, both of which
+/// `tools::crash` already reports, so a row that names neither resolves to
+/// nothing here rather than faulting.
+pub(super) fn anchor(parts: &[Part<'_>], model: &Model, row: usize) -> Option<Point> {
+    let align = model.alignment.get(row)?;
+    let rest = usize::try_from(align.part).ok().and_then(|index| model.parts.get(index))?;
+    let part = parts.iter().find(|placed| ptr::eq(placed.rest, rest))?;
+
+    let local = |offset: i32, resting: i32, animated: i32, scale: i32| {
+        let pivot = resting.wrapping_add(animated);
+
+        over_unit(offset.wrapping_sub(pivot) as i64 * scale as i64, model.scale_unit) as i32
+    };
+
+    Some(part.world.transform.apply(Point {
+        x: local(align.x, part.rest.pivot_x, part.pose.pivot_x, part.world.scale_x),
+        y: local(align.y, part.rest.pivot_y, part.pose.pivot_y, part.world.scale_y),
+    }))
 }
 
 /// Flattens the placed parts into one quad each, in the order they arrive.

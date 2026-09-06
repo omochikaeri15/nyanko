@@ -76,31 +76,131 @@ pub fn resolve_frame(
     let mut frames = engine::build(&parts, rig);
 
     if let Some(row) = offset {
-        shift(&mut frames, &rig.model, row);
+        shift(&mut frames, &parts, &rig.model, row);
     }
 
     frames
 }
 
-/// Translates every vertex by an alignment row, which the row states negated.
+/// Translates every vertex so the rig's alignment row lands on the origin.
 ///
-/// The row is authored against the root part's pivot and in the root's own
-/// space, so the pivot joins the offset before the root's resting scale carries
-/// the pair onto the screen. The root's own authored position takes no part in
-/// it.
-fn shift(frames: &mut [FrameData], model: &Model, row: usize) {
-    let Some(align) = model.alignment.get(row) else { return };
-    let Some(root) = model.parts.first() else { return };
-
-    let unit = if model.scale_unit == 0 { 1000.0 } else { model.scale_unit as f32 };
-
-    let x = (-(align.x as f32) + root.pivot_x as f32) * (root.scale_x as f32 / unit);
-    let y = (-(align.y as f32) + root.pivot_y as f32) * (root.scale_y as f32 / unit);
+/// The engine resolves the row to a world point and draws the entity with that
+/// point pinned to the position the entity occupies, so placing the rig by the
+/// row means subtracting the point from the geometry the same pass placed.
+fn shift(frames: &mut [FrameData], parts: &[engine::Part<'_>], model: &Model, row: usize) {
+    let Some(anchor) = engine::anchor(parts, model, row) else { return };
+    let (x, y) = (anchor.x as f32, anchor.y as f32);
 
     for frame in frames {
         for corner in frame.vertices.chunks_exact_mut(2) {
-            corner[0] += x;
-            corner[1] += y;
+            corner[0] -= x;
+            corner[1] -= y;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::rig::{Alignment, AnimModification, Keyframe, ModelPart, SpriteCut, SpriteSheet};
+
+    use super::*;
+
+    fn box_part(parent: i32, x: i32, y: i32) -> ModelPart {
+        ModelPart {
+            parent,
+            x,
+            y,
+            pivot_x: 32,
+            pivot_y: 32,
+            scale_x: 1000,
+            scale_y: 1000,
+            opacity: 1000,
+            ..ModelPart::default()
+        }
+    }
+
+    fn align(part: i32) -> Alignment {
+        Alignment { part, x: 32, y: 64, ..Alignment::default() }
+    }
+
+    fn rig(parts: Vec<ModelPart>, alignment: Vec<Alignment>) -> Rig {
+        let model = Model { version: 3, parts, alignment, ..Model::default() };
+
+        let sheet = SpriteSheet {
+            cuts: vec![SpriteCut { x: 0, y: 0, width: 64, height: 64, name: String::new() }],
+            ..SpriteSheet::default()
+        };
+
+        Rig { model, sheet }
+    }
+
+    fn drive(part: i32, kind: i32, keyframes: Vec<Keyframe>) -> AnimModification {
+        AnimModification { part, kind, keyframes, ..AnimModification::default() }
+    }
+
+    fn animation(modifications: Vec<AnimModification>) -> Animation {
+        Animation { version: 1, modifications }
+    }
+
+    fn hold(value: i32) -> Vec<Keyframe> {
+        vec![Keyframe { frame: 0, value, ease: 0, ease_power: 0 }]
+    }
+
+    fn centre(frames: &[FrameData], index: usize) -> (f32, f32) {
+        let vertices = frames[index].vertices;
+        let x = vertices.iter().step_by(2).sum::<f32>() / 4.0;
+        let y = vertices.iter().skip(1).step_by(2).sum::<f32>() / 4.0;
+
+        (x, y)
+    }
+
+    #[test]
+    fn the_rig_orbits_an_alignment_row_whose_part_turns() {
+        let rig = rig(vec![box_part(-1, 0, 0)], vec![align(0), align(0)]);
+        let anim = animation(vec![
+            drive(0, 11, vec![
+                Keyframe { frame: 0, value: 0, ease: 0, ease_power: 0 },
+                Keyframe { frame: 30, value: 3600, ease: 0, ease_power: 0 },
+            ]),
+            drive(0, 4, hold(30)),
+            drive(0, 5, hold(-10)),
+        ]);
+
+        let resting = resolve_frame(&rig, Some(&anim), 0, Some(0));
+        let turned = resolve_frame(&rig, Some(&anim), 15, Some(0));
+
+        assert_eq!(centre(&resting, 0), (0.0, -32.0));
+        assert_eq!(centre(&turned, 0), (0.0, 32.0));
+    }
+
+    #[test]
+    fn the_row_is_measured_against_the_part_it_names() {
+        let parts = vec![box_part(-1, 0, 0), box_part(0, 100, 0)];
+
+        let root = resolve_frame(&rig(parts.clone(), vec![align(0)]), None, 0, Some(0));
+        let child = resolve_frame(&rig(parts, vec![align(1)]), None, 0, Some(0));
+
+        assert_eq!(centre(&root, 1), (100.0, -32.0));
+        assert_eq!(centre(&child, 1), (0.0, -32.0));
+    }
+
+    #[test]
+    fn the_row_subtracts_the_animated_pivot() {
+        let rig = rig(vec![box_part(-1, 0, 0)], vec![align(0)]);
+        let anim = animation(vec![drive(0, 6, hold(10))]);
+
+        let frames = resolve_frame(&rig, Some(&anim), 0, Some(0));
+
+        assert_eq!(centre(&frames, 0), (0.0, -32.0));
+    }
+
+    #[test]
+    fn the_row_is_carried_by_the_animated_scale() {
+        let rig = rig(vec![box_part(-1, 0, 0)], vec![align(0)]);
+        let anim = animation(vec![drive(0, 10, hold(2000))]);
+
+        let frames = resolve_frame(&rig, Some(&anim), 0, Some(0));
+
+        assert_eq!(centre(&frames, 0), (0.0, -64.0));
     }
 }
