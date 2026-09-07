@@ -72,6 +72,26 @@ pub fn resolve_frame(
     frame: i32,
     offset: Option<usize>,
 ) -> Vec<FrameData> {
+    resolve_posed(rig, anim, frame, offset).0
+}
+
+/// Resolves a rig at a single frame, keeping the posed parts the geometry came from.
+///
+/// # Arguments
+/// * `rig` - The parsed rig supplying the part hierarchy and sprite atlas.
+/// * `anim` - The animation to evaluate, or `None` to resolve the rig in its resting pose.
+/// * `frame` - The frame to evaluate at. The engine has no notion of a fractional frame.
+/// * `offset` - The index of the alignment row placing the rig, where zero is combat, or `None` to leave the rig at the engine's own origin.
+///
+/// # Returns
+/// A tuple holding the `Vec<FrameData>` [`resolve_frame`] returns and the
+/// `Vec<engine::Part>` the pass produced it from, in the engine's draw order.
+pub(super) fn resolve_posed<'a>(
+    rig: &'a Rig,
+    anim: Option<&Animation>,
+    frame: i32,
+    offset: Option<usize>,
+) -> (Vec<FrameData>, Vec<engine::Part<'a>>) {
     let parts = engine::resolve(&rig.model, anim, frame, &rig.sheet);
     let mut frames = engine::build(&parts, rig);
 
@@ -79,7 +99,7 @@ pub fn resolve_frame(
         shift(&mut frames, &parts, &rig.model, row);
     }
 
-    frames
+    (frames, parts)
 }
 
 /// Translates every vertex so the rig's alignment row lands on the origin.

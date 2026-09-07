@@ -8,10 +8,11 @@
 
 use std::error;
 use std::fmt;
+use std::mem;
 use std::ptr;
 use std::slice;
 
-use crate::graphics::animate::{resolve_frame, FrameData};
+use crate::graphics::animate::{self, FrameData};
 use crate::graphics::engine;
 use crate::graphics::rig::{Animation, ModelPart, Rig};
 
@@ -48,15 +49,15 @@ impl error::Error for PartError {}
 pub struct PartFrame {
     /// The index of the part within the model's own part list.
     pub part: usize,
-    /// The geometry that part resolved to, identical to the entry [`resolve_frame`] holds at the same position.
+    /// The geometry that part resolved to, identical to the entry [`animate::resolve_frame`] holds at the same position.
     pub frame: FrameData,
 }
 
 /// Resolves a rig at a single frame, reporting which model part drew each entry.
 ///
-/// The rig is posed twice, once for the geometry and once to recover the part
-/// each entry came from, so this costs about double what [`resolve_frame`]
-/// costs and suits a diagnostic overlay rather than a draw loop.
+/// Recovering the part behind an entry means replaying the draw pass one part
+/// at a time, so this costs more than [`animate::resolve_frame`] alone and
+/// suits a diagnostic overlay rather than a draw loop.
 ///
 /// # Arguments
 /// * `rig` - The parsed rig supplying the part hierarchy and sprite atlas.
@@ -66,16 +67,15 @@ pub struct PartFrame {
 ///
 /// # Returns
 /// A `Result` containing a `Vec<PartFrame>` in the same order as
-/// [`resolve_frame`], or a `PartError` if the two passes disagreed on which
-/// parts the engine draws.
+/// [`animate::resolve_frame`], or a `PartError` if the two passes disagreed on
+/// which parts the engine draws.
 pub fn resolve(
     rig: &Rig,
     anim: Option<&Animation>,
     frame: i32,
     offset: Option<usize>,
 ) -> Result<Vec<PartFrame>, PartError> {
-    let frames = resolve_frame(rig, anim, frame, offset);
-    let posed = engine::resolve(&rig.model, anim, frame, &rig.sheet);
+    let (frames, posed) = animate::resolve_posed(rig, anim, frame, offset);
 
     let kept: Vec<&ModelPart> = posed.iter()
         .filter(|part| !engine::build(slice::from_ref(part), rig).is_empty())
@@ -96,14 +96,26 @@ pub fn resolve(
 }
 
 /// Locates a posed part's resting row within the model by its address.
+///
+/// Every posed part borrows a row of the same slice, so the distance from the
+/// slice base names the row directly. The candidate is confirmed by address
+/// before it is trusted, and a part borrowed from elsewhere falls back to a
+/// scan.
 fn index_of(rest: &ModelPart, parts: &[ModelPart]) -> Option<usize> {
-    parts.iter().position(|candidate| ptr::eq(candidate, rest))
+    let distance = (ptr::from_ref(rest) as usize).wrapping_sub(parts.as_ptr() as usize);
+    let index = distance / mem::size_of::<ModelPart>();
+
+    parts.get(index)
+        .is_some_and(|candidate| ptr::eq(candidate, rest))
+        .then_some(index)
+        .or_else(|| parts.iter().position(|candidate| ptr::eq(candidate, rest)))
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
+    use crate::graphics::animate::resolve_frame;
     use crate::graphics::rig::{AnimModification, Keyframe, Model, SpriteCut, SpriteSheet};
 
     use super::*;
@@ -241,6 +253,24 @@ mod tests {
 
         assert_eq!(entry.frame.sprite_index, 0);
         assert_eq!(swapped.iter().filter(|entry| entry.frame.sprite_index == 0).count(), 2);
+    }
+
+    #[test]
+    fn every_row_of_the_model_finds_its_own_index() {
+        let rig = rig();
+
+        for (index, rest) in rig.model.parts.iter().enumerate() {
+            assert_eq!(index_of(rest, &rig.model.parts), Some(index));
+        }
+    }
+
+    #[test]
+    fn a_part_borrowed_from_another_model_maps_to_nothing() {
+        let (foreign, rig) = (rig(), rig());
+
+        for rest in &foreign.model.parts {
+            assert_eq!(index_of(rest, &rig.model.parts), None);
+        }
     }
 
     #[test]
