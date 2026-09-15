@@ -52,7 +52,7 @@ pub(super) struct Point {
 /// and applies it to whole-pixel points, which is why every corner comes back
 /// truncated toward zero rather than kept at sub-pixel precision.
 #[derive(Clone, Copy, Debug)]
-struct Transform {
+pub(super) struct Transform {
     x_axis: (f32, f32),
     y_axis: (f32, f32),
     origin: (f32, f32),
@@ -99,7 +99,7 @@ impl Transform {
 
     /// Applies the transform, truncating toward zero as the engine's own cast to
     /// a signed integer does.
-    fn apply(&self, point: Point) -> Point {
+    pub(super) fn apply(&self, point: Point) -> Point {
         let (x, y) = (point.x as f32, point.y as f32);
 
         Point {
@@ -163,14 +163,14 @@ impl Pose {
 /// ratios, because the engine keeps dividing by those units as it walks down the
 /// hierarchy.
 #[derive(Clone, Copy, Debug, Default)]
-struct World {
+pub(super) struct World {
     scale_x: i32,
     scale_y: i32,
     opacity: i32,
     flip_x: bool,
     flip_y: bool,
     corners: [Point; 4],
-    transform: Transform,
+    pub(super) transform: Transform,
 }
 
 /// One model part being posed, holding the block the engine keeps per part.
@@ -178,11 +178,11 @@ struct World {
 pub(super) struct Part<'a> {
     pub(super) rest: &'a ModelPart,
     pose: Pose,
-    world: World,
+    pub(super) world: World,
 }
 
 impl Part<'_> {
-    fn parent(&self) -> i32 {
+    pub(super) fn parent(&self) -> i32 {
         self.rest.parent.wrapping_add(self.pose.parent)
     }
 
@@ -430,7 +430,7 @@ fn polynomial(keyframes: &[Keyframe], index: usize, local: i32) -> i32 {
 /// whose resolved parent was collected in the previous sweep and starting from
 /// the parts that name no parent at all. A part caught in a parent cycle is
 /// never collected, and so is never placed in the world.
-fn deployment_order(parts: &[Part]) -> Vec<usize> {
+pub(super) fn deployment_order(parts: &[Part]) -> Vec<usize> {
     let mut order = Vec::with_capacity(parts.len());
     let mut frontier = vec![NO_PARENT];
 

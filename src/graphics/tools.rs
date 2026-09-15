@@ -2,6 +2,7 @@
 
 pub mod boundary;
 pub mod crash;
+pub mod joint;
 pub mod math;
 pub mod part;
 pub mod periodicity;

@@ -101,7 +101,7 @@ pub fn resolve(
 /// slice base names the row directly. The candidate is confirmed by address
 /// before it is trusted, and a part borrowed from elsewhere falls back to a
 /// scan.
-fn index_of(rest: &ModelPart, parts: &[ModelPart]) -> Option<usize> {
+pub(super) fn index_of(rest: &ModelPart, parts: &[ModelPart]) -> Option<usize> {
     let distance = (ptr::from_ref(rest) as usize).wrapping_sub(parts.as_ptr() as usize);
     let index = distance / mem::size_of::<ModelPart>();
 

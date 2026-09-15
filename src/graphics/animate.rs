@@ -95,22 +95,32 @@ pub(super) fn resolve_posed<'a>(
     let parts = engine::resolve(&rig.model, anim, frame, &rig.sheet);
     let mut frames = engine::build(&parts, rig);
 
-    if let Some(row) = offset {
-        shift(&mut frames, &parts, &rig.model, row);
-    }
+    shift(&mut frames, lift(&parts, &rig.model, offset));
 
     (frames, parts)
 }
 
-/// Translates every vertex so the rig's alignment row lands on the origin.
+/// Resolves the world point the rig's alignment row pins to the origin.
 ///
 /// The engine resolves the row to a world point and draws the entity with that
-/// point pinned to the position the entity occupies, so placing the rig by the
-/// row means subtracting the point from the geometry the same pass placed.
-fn shift(frames: &mut [FrameData], parts: &[engine::Part<'_>], model: &Model, row: usize) {
-    let Some(anchor) = engine::anchor(parts, model, row) else { return };
-    let (x, y) = (anchor.x as f32, anchor.y as f32);
+/// point pinned to the position the entity occupies, so placing anything the
+/// same pass placed means subtracting this point from it.
+///
+/// # Arguments
+/// * `parts` - The posed parts, in any order.
+/// * `model` - The model the parts were posed against.
+/// * `offset` - The index of the alignment row placing the rig, or `None` to leave the rig at the engine's own origin.
+///
+/// # Returns
+/// A tuple holding the x and y to subtract, which is zero when there is no row or the row resolves to nothing.
+pub(super) fn lift(parts: &[engine::Part<'_>], model: &Model, offset: Option<usize>) -> (f32, f32) {
+    offset
+        .and_then(|row| engine::anchor(parts, model, row))
+        .map_or((0.0, 0.0), |anchor| (anchor.x as f32, anchor.y as f32))
+}
 
+/// Translates every vertex by the negation of a lifted anchor.
+fn shift(frames: &mut [FrameData], (x, y): (f32, f32)) {
     for frame in frames {
         for corner in frame.vertices.chunks_exact_mut(2) {
             corner[0] -= x;
