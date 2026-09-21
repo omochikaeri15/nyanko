@@ -32,11 +32,13 @@ pub enum RuleType {
     TrustFund(Vec<u32>),
     /// Every unit is forced to share the same redeployment delay.
     CooldownEquality(Vec<u32>),
-    /// Only units at or below a given rarity may be fielded.
+    /// The lineup may hold only so many units of each rarity.
+    LineupLimit(Vec<u32>),
+    /// Only so many units of each rarity may be on the field at once.
     RarityLimit(Vec<u32>),
-    /// Unit deployment costs are reduced.
+    /// Every unit is deployed for the same fixed cost.
     CheapLabor(Vec<u32>),
-    /// Unit deployment costs are overridden to a fixed value.
+    /// Unit deployment costs are scaled by a percentage per rarity.
     CatCost(Vec<u32>),
     /// The rate at which the budget accumulates is altered.
     CatProduction(Vec<u32>),
@@ -125,6 +127,7 @@ fn parse_inner(json_str: &str) -> Result<SpecialRulesMap, SpecialRulesMapError> 
                 let rule = match r_id {
                     0 => RuleType::TrustFund(params),
                     1 => RuleType::CooldownEquality(params),
+                    2 => RuleType::LineupLimit(params),
                     3 => RuleType::RarityLimit(params),
                     4 => RuleType::CheapLabor(params),
                     5 => RuleType::CatCost(params),

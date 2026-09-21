@@ -94,6 +94,8 @@ pub struct MapOptionEntry {
     pub cooldown_minutes: u32,
     /// Whether the map is removed from the selection list once cleared.
     pub hidden_upon_clear: bool,
+    /// The multiplier applied to every unit's base deployment cost, or zero when the map leaves costs alone.
+    pub cost_multiplier: u32,
     /// The trailing comment text accompanying the row in the source file.
     pub comment: String,
 }
@@ -118,6 +120,7 @@ impl MapOptionEntry {
         max_clears        : 9;
         cooldown_minutes  : 11;
         hidden_upon_clear : 14;
+        cost_multiplier   : 16;
     };
 }
 
