@@ -69,8 +69,10 @@ pub struct Map {
     pub score_bonuses: Option<ScoreBonusMapEntry>,
     /// The constraints this map imposes on the player, if it declares any.
     pub special_rules: Option<SpecialRulesMapEntry>,
-    /// The identifiers of unit combos this map forbids.
+    /// The combo effect types this map switches off.
     pub invalid_combos: Vec<u32>,
+    /// The multiplier applied to every unit's base deployment cost, or zero when the map leaves costs alone.
+    pub cost_multiplier: u32,
     /// The reward drop configuration for this map, if it declares one.
     pub drop_items: Option<DropItemEntry>,
 }
