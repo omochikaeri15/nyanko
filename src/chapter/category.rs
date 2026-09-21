@@ -56,6 +56,8 @@ pub enum Category {
     OtherworldColosseum,
     /// The Catclaw Championships chapter.
     CatclawChampionships,
+    /// The Fever Rush chapter, whose stages fill a gauge from event points.
+    FeverRush,
     /// A chapter prefix this parser does not recognize, carrying the raw prefix.
     Unknown(String),
 }
@@ -98,6 +100,7 @@ impl Category {
             Self::ZeroLegends          => "ND".to_string(),
             Self::OtherworldColosseum  => "SR".to_string(),
             Self::CatclawChampionships => "G".to_string(),
+            Self::FeverRush            => "PR".to_string(),
             Self::Unknown(prefix)      => prefix.clone(),
         }
     }
@@ -143,6 +146,7 @@ impl Category {
             Self::BehemothCulling      => prefixes.push("RQ".to_string()),
             Self::ZeroLegends          => prefixes.push("RND".to_string()),
             Self::OtherworldColosseum  => prefixes.push("RSR".to_string()),
+            Self::FeverRush            => prefixes.push("RPR".to_string()),
             Self::Unknown(prefix)      => {
                 let upper = prefix.to_uppercase();
                 if upper.starts_with('R') && upper.len() > 1 {
@@ -193,6 +197,7 @@ impl Category {
             "ND"    | "RND" => Self::ZeroLegends,
             "SR"    | "RSR" => Self::OtherworldColosseum,
             "G"             => Self::CatclawChampionships,
+            "PR"    | "RPR" => Self::FeverRush,
             _               => Self::Unknown(prefix.to_string()),
         }
     }
@@ -229,6 +234,7 @@ impl Category {
             Self::ZeroLegends          => Some(34),
             Self::OtherworldColosseum  => Some(36),
             Self::CatclawChampionships => Some(37),
+            Self::FeverRush            => Some(39),
             Self::Unknown(_)           => None,
         }
     }

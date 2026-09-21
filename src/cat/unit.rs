@@ -1,6 +1,8 @@
 //! Cat unit data: the aggregate [`Unit`], the tables it draws on, the parsers
 //! behind them.
 
+mod equipmentlist;
+mod equipmentslot;
 mod nyancombo;
 mod nyancombodata;
 mod nyancombofilter;
@@ -23,6 +25,8 @@ use serde::{Deserialize, Serialize};
 use crate::combat::{Entity, EntityError};
 use crate::common::file::Separator;
 
+pub use equipmentlist::{Equipment, EquipmentListError};
+pub use equipmentslot::{EquipmentSlot, EquipmentSlotError};
 pub use nyancombo::{Nyancombo, NyancomboError};
 pub use nyancombodata::{ComboSlot, ComboStrength, NyancomboData, NyancomboDataError};
 pub use nyancombofilter::{NyancomboFilter, NyancomboFilterError};
