@@ -13,6 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The language suffix the Japanese text tables carry.
+const JAPANESE: &str = "ja";
+
 /// A delimiter one of the engine's delimited text files separates its columns with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Separator {
@@ -51,6 +54,30 @@ impl Separator {
             ',' => Some(Self::Comma),
             _ => None,
         })
+    }
+
+    /// The delimiter a localized text table with this file name is written with.
+    ///
+    /// The Japanese tables separate their columns with a comma and write any
+    /// comma inside a field as a wide one; every other language separates with a
+    /// bar so that a field may carry an ordinary comma. Only a `_ja` suffix
+    /// names a Japanese table, so a table shipped without a language suffix is
+    /// bar-separated like the rest.
+    ///
+    /// This reads the name alone and never the payload, which is what makes it
+    /// safe on a table whose first field legitimately carries a comma. Reach for
+    /// [`Separator::detect`] only when the name is unknown.
+    ///
+    /// # Arguments
+    /// * `name` - The file name, with or without its extension.
+    ///
+    /// # Returns
+    /// A `Separator` holding the delimiter that table separates its columns with.
+    pub fn localized(name: &str) -> Self {
+        let stem = name.rsplit_once('.').map_or(name, |(head, _)| head);
+        let japanese = stem.rsplit_once('_').is_some_and(|(_, code)| code == JAPANESE);
+
+        if japanese { Self::Comma } else { Self::Pipe }
     }
 
     /// The character this delimiter is written as.
@@ -237,6 +264,18 @@ mod tests {
         assert_eq!(Separator::detect(shredded).map(Separator::char), Some('|'));
         assert_eq!(resolve(Some(Separator::Comma), shredded), ',');
         assert_eq!(resolve(None, shredded), '|');
+    }
+
+    #[test]
+    fn only_a_ja_suffix_names_a_comma_separated_table() {
+        assert_eq!(Separator::localized("Unit_Explanation_ja.csv"), Separator::Comma);
+        assert_eq!(Separator::localized("Unit_Explanation_en.csv"), Separator::Pipe);
+        assert_eq!(Separator::localized("Unit_Explanation_th.csv"), Separator::Pipe);
+        // A localized table shipped with no suffix at all is still bar-separated.
+        assert_eq!(Separator::localized("matatabi_Popup.csv"), Separator::Pipe);
+        assert_eq!(Separator::localized("TitleMessage"), Separator::Pipe);
+        // "ja" has to be the suffix, not merely the tail of a longer word.
+        assert_eq!(Separator::localized("jinja_level.csv"), Separator::Pipe);
     }
 
     #[test]
