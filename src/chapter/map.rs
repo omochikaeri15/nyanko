@@ -2,6 +2,7 @@
 //!
 //! This module re-exports the aggregate [`Map`] structure alongside every
 //! specialized parser and error type that contributes to it.
+mod demoncastle;
 mod dropitem;
 mod ex_option;
 mod lockskipdata;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::chapter::Category;
 
+pub use demoncastle::{DemonCastleDefine, DemonCastleError, DemonCastleLimit};
 pub use dropitem::{DropItem, DropItemEntry, DropItemError};
 pub use ex_option::{ExOption, ExOptionError};
 pub use lockskipdata::{LockSkipData, LockSkipDataEntry, LockSkipDataError};
